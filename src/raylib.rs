@@ -100,14 +100,12 @@ impl Drop for Window {
 #[derive(Clone, Copy)]
 pub enum ImgFormat {
     Jpg,
-    Svg,
 }
 
 impl ImgFormat {
     pub fn to_cstr(self) -> &'static CStr {
         match self {
             ImgFormat::Jpg => CStr::from_bytes_with_nul(b".jpg\0").unwrap(),
-            ImgFormat::Svg => CStr::from_bytes_with_nul(b".svg\0").unwrap(),
         }
     }
 }
@@ -187,7 +185,7 @@ impl Drop for Texture2D {
     }
 }
 
-pub fn do_draw(draw_fn: impl Fn()) {
+pub fn do_draw(draw_fn: impl FnOnce()) {
     unsafe { sys::BeginDrawing() };
     draw_fn();
     unsafe { sys::EndDrawing() };

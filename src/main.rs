@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use itertools::iproduct;
 
 use crate::{
-    chess::{Colour, Piece},
+    chess::{Colour, Game, Piece, Position},
     raylib::{Image, ImgFormat, Texture2D, Window, WHITE},
 };
 
@@ -25,6 +25,7 @@ fn main() {
 
     let mut win = Window::new(DEFAULT_WIN_WIDTH, DEFAULT_WIN_HEIGHT, TITLE);
     let mut img_cache = ImageCache::new();
+    let mut game = Game::new();
 
     win.set_target_fps(FPS);
     while !win.should_close() {
@@ -35,13 +36,26 @@ fn main() {
         let board_img = img_cache.get_board(board_size);
         let board_tex = Texture2D::from(board_img);
 
-        let pawn_img = img_cache.get_piece(Piece::Pawn, Colour::White, piece_size);
-        let pawn_tex = Texture2D::from(pawn_img);
+        let mut piece_list = Vec::new();
+        let board = game.board();
+        for (rank, rp) in board.0.iter().enumerate() {
+            for (file, pos) in rp.iter().enumerate() {
+                if let &Position::Occupied(piece, col) = pos {
+                    let piece_img = img_cache.get_piece(piece, col, piece_size);
+                    let piece_tex = Texture2D::from(piece_img);
+                    let xpos = file as u32 * piece_size;
+                    let ypos = rank as u32 * piece_size;
+                    piece_list.push((piece_tex, xpos, ypos));
+                }
+            }
+        }
 
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
             board_tex.draw(0, 0, WHITE);
-            pawn_tex.draw(0, 0, WHITE);
+            for (piece_tex, xpos, ypos) in &piece_list {
+                piece_tex.draw(*xpos, *ypos, WHITE);
+            }
         });
     }
 }
