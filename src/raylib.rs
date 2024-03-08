@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
 pub use sys::{Color, WHITE};
@@ -51,6 +52,7 @@ mod sys {
         pub fn GetRenderHeight() -> c_int;
 
         pub fn LoadImageFromMemory(ext: *const c_char, data: *const c_uchar, size: c_int) -> Image;
+        pub fn LoadImageSvg(file_name_or_str: *const c_char, width: c_int, height: c_int) -> Image;
         pub fn UnloadImage(image: Image);
         pub fn ImageResize(image: *mut Image, newWidth: c_int, newHeight: c_int);
         pub fn ImageCopy(image: Image) -> Image;
@@ -98,12 +100,14 @@ impl Drop for Window {
 #[derive(Clone, Copy)]
 pub enum ImgFormat {
     Jpg,
+    Svg,
 }
 
 impl ImgFormat {
     pub fn to_cstr(self) -> &'static CStr {
         match self {
             ImgFormat::Jpg => CStr::from_bytes_with_nul(b".jpg\0").unwrap(),
+            ImgFormat::Svg => CStr::from_bytes_with_nul(b".svg\0").unwrap(),
         }
     }
 }
@@ -116,6 +120,24 @@ impl Image {
     pub fn from_mem(format: ImgFormat, data: &[u8]) -> Self {
         let img = unsafe {
             sys::LoadImageFromMemory(format.to_cstr().as_ptr(), data.as_ptr(), data.len() as _)
+        };
+        Self { img }
+    }
+
+    pub fn from_svg_mem(data: &[u8], width: u32, height: u32) -> Self {
+        let data = if data.last() == Some(&b'\0') {
+            Cow::from(data)
+        } else {
+            let mut data = data.to_vec();
+            data.push(b'\0');
+            Cow::from(data)
+        };
+        let img = unsafe {
+            sys::LoadImageSvg(
+                CStr::from_bytes_with_nul(data.as_ref()).unwrap().as_ptr(),
+                width as _,
+                height as _,
+            )
         };
         Self { img }
     }
