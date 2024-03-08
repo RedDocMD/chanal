@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+use enum_iterator::Sequence;
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Sequence)]
 pub enum Piece {
     Pawn,
     Rook,
@@ -8,7 +10,7 @@ pub enum Piece {
     Queen,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Sequence)]
 pub enum Colour {
     White,
     Black,

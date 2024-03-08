@@ -2,3 +2,7 @@
 name = "chanal"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+enum-iterator = "2.0.0"
+itertools = "0.12.1"
