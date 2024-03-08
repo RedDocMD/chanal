@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
-pub use sys::{Color, MouseCursor, Rectangle, Vector2, WHITE};
+pub use sys::{Color, MouseButton, MouseCursor, Rectangle, TraceLogLevel, Vector2};
 
 mod sys {
     use std::ffi::{c_char, c_float, c_int, c_uchar, c_uint, c_void};
@@ -29,21 +29,21 @@ mod sys {
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct Color {
-        r: c_uchar,
-        g: c_uchar,
-        b: c_uchar,
-        a: c_uchar,
+        pub r: c_uchar,
+        pub g: c_uchar,
+        pub b: c_uchar,
+        pub a: c_uchar,
     }
 
-    pub const WHITE: Color = Color {
-        r: 255,
-        g: 255,
-        b: 255,
-        a: 255,
-    };
+    impl Color {
+        pub fn fade(self, factor: f32) -> Self {
+            unsafe { Fade(self, factor) }
+        }
+    }
 
     #[repr(i32)]
     #[derive(Clone, Copy)]
+    #[allow(dead_code)]
     pub enum MouseCursor {
         Default = 0,      // Default pointer shape
         Arrow = 1,        // Arrow shape
@@ -74,6 +74,31 @@ mod sys {
         pub y: c_float,
     }
 
+    #[repr(i32)]
+    #[allow(dead_code)]
+    pub enum MouseButton {
+        Left = 0,    // Mouse button left
+        Right = 1,   // Mouse button right
+        Middle = 2,  // Mouse button middle (pressed wheel)
+        Side = 3,    // Mouse button side (advanced mouse device)
+        Extra = 4,   // Mouse button extra (advanced mouse device)
+        Forward = 5, // Mouse button forward (advanced mouse device)
+        Back = 6,    // Mouse button back (advanced mouse device)
+    }
+
+    #[repr(i32)]
+    #[allow(dead_code)]
+    pub enum TraceLogLevel {
+        All = 0, // Display all logs
+        Trace,   // Trace logging, intended for internal use only
+        Debug, // Debug logging, used for internal debugging, it should be disabled on release builds
+        Info,  // Info logging, used for program execution info
+        Warning, // Warning logging, used on recoverable failures
+        Error, // Error logging, used on unrecoverable failures
+        Fatal, // Fatal logging, used to abort program: exit(EXIT_FAILURE)
+        None,  // Disable logging
+    }
+
     #[link(name = "raylib")]
     extern "C" {
         pub fn InitWindow(width: c_int, height: c_int, title: *const c_char);
@@ -99,10 +124,23 @@ mod sys {
 
         pub fn SetMouseCursor(cursor: c_int);
         pub fn GetMousePosition() -> Vector2;
+        pub fn IsMouseButtonDown(button: c_int) -> c_int;
+        pub fn IsMouseButtonReleased(button: c_int) -> c_int;
 
         pub fn CheckCollisionPointRec(point: Vector2, rect: Rectangle) -> c_int;
+
+        pub fn Fade(col: Color, alpha: c_float) -> Color;
+
+        pub fn SetTraceLogLevel(log_level: c_int);
     }
 }
+
+pub const WHITE: Color = Color {
+    r: 255,
+    g: 255,
+    b: 255,
+    a: 255,
+};
 
 pub struct Window;
 
@@ -242,4 +280,16 @@ pub fn get_mouse_position() -> Vector2 {
 
 pub fn check_collision_point_rect(point: Vector2, rect: Rectangle) -> bool {
     unsafe { sys::CheckCollisionPointRec(point, rect) != 0 }
+}
+
+pub fn is_mouse_button_down(mb: MouseButton) -> bool {
+    unsafe { sys::IsMouseButtonDown(mb as _) != 0 }
+}
+
+pub fn is_mouse_button_released(mb: MouseButton) -> bool {
+    unsafe { sys::IsMouseButtonReleased(mb as _) != 0 }
+}
+
+pub fn set_trace_log_level(level: TraceLogLevel) {
+    unsafe { sys::SetTraceLogLevel(level as _) };
 }

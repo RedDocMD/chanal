@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
@@ -22,12 +23,27 @@ pub enum Colour {
 pub enum Position {
     Empty,
     Occupied(Piece, Colour),
+    Picked(Piece, Colour),
 }
 
 pub const BOARD_SIZE: usize = 8;
 
 #[derive(Debug)]
 pub struct Board(pub [[Position; BOARD_SIZE]; BOARD_SIZE]);
+
+impl Deref for Board {
+    type Target = [[Position; BOARD_SIZE]; BOARD_SIZE];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Board {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct Game {
@@ -43,6 +59,14 @@ impl Game {
 
     pub fn board(&self) -> &Board {
         &self.fen.board
+    }
+
+    pub fn board_mut(&mut self) -> &mut Board {
+        &mut self.fen.board
+    }
+
+    pub fn to_move(&self) -> Colour {
+        self.fen.to_move
     }
 }
 

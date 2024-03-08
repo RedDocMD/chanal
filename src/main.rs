@@ -2,25 +2,15 @@ use std::collections::HashMap;
 
 use itertools::iproduct;
 
-use crate::{
-    chess::{Colour, Game, Piece, Position},
-    raylib::{
-        check_collision_point_rect, get_mouse_position, set_mouse_cursor, Image, ImgFormat,
-        MouseCursor, Rectangle, Texture2D, Window, WHITE,
-    },
-};
+use crate::{chess::*, raylib::*};
 
 mod assets;
 mod chess;
 mod raylib;
 
-fn board_size(width: u32, height: u32) -> u32 {
-    let min_dim = width.min(height);
-    let res = min_dim % chess::BOARD_SIZE as u32;
-    min_dim - res
-}
-
 fn main() {
+    set_trace_log_level(TraceLogLevel::Error);
+
     const DEFAULT_WIN_WIDTH: u32 = 500;
     const DEFAULT_WIN_HEIGHT: u32 = 500;
     const TITLE: &str = "Chanal";
@@ -28,7 +18,10 @@ fn main() {
 
     let mut win = Window::new(DEFAULT_WIN_WIDTH, DEFAULT_WIN_HEIGHT, TITLE);
     let mut img_cache = ImageCache::new();
-    let mut game = Game::new();
+    let mut gs = GameState {
+        game: Game::new(),
+        mouse_state: MouseState::Normal,
+    };
 
     win.set_target_fps(FPS);
     while !win.should_close() {
@@ -36,24 +29,6 @@ fn main() {
         let (boardx, boardy) = (0, 0);
         let board_size = board_size(width, height);
         let piece_size = board_size / chess::BOARD_SIZE as u32;
-
-        // Generate textures for board and pieces
-        let board_img = img_cache.get_board(board_size);
-        let board_tex = Texture2D::from(board_img);
-
-        let mut piece_list = Vec::new();
-        let board = game.board();
-        for (rank, rp) in board.0.iter().enumerate() {
-            for (file, pos) in rp.iter().enumerate() {
-                if let &Position::Occupied(piece, col) = pos {
-                    let piece_img = img_cache.get_piece(piece, col, piece_size);
-                    let piece_tex = Texture2D::from(piece_img);
-                    let xpos = boardx + file as u32 * piece_size;
-                    let ypos = boardy + rank as u32 * piece_size;
-                    piece_list.push((piece_tex, xpos, ypos));
-                }
-            }
-        }
 
         // Set cursor
         let mouse_pos = get_mouse_position();
@@ -63,17 +38,100 @@ fn main() {
             width: board_size as _,
             height: board_size as _,
         };
-        if check_collision_point_rect(mouse_pos, board_rect) {
+        let is_mouse_on_board = check_collision_point_rect(mouse_pos, board_rect);
+        if is_mouse_on_board {
             set_mouse_cursor(MouseCursor::PointingHand);
         } else {
             set_mouse_cursor(MouseCursor::Default);
         }
 
+        // Check for piece clicking and dragging
+        if is_mouse_on_board {
+            if is_mouse_button_down(MouseButton::Left) {
+                if let MouseState::Normal = gs.mouse_state {
+                    let mx = mouse_pos.x as u32;
+                    let my = mouse_pos.y as u32;
+                    let file = ((mx - boardx) / piece_size) as usize;
+                    let rank = ((my - boardy) / piece_size) as usize;
+                    let pos = gs.game.board()[rank][file];
+                    if let Position::Occupied(piece, colour) = pos {
+                        if colour == gs.game.to_move() {
+                            let pp = PickedPiece {
+                                piece,
+                                colour,
+                                rank,
+                                file,
+                            };
+                            gs.mouse_state = MouseState::Picked(pp);
+                            gs.game.board_mut()[rank][file] = Position::Picked(piece, colour);
+                        } else {
+                            gs.mouse_state = MouseState::Clicked;
+                        }
+                    } else {
+                        gs.mouse_state = MouseState::Clicked;
+                    }
+                }
+            } else if is_mouse_button_released(MouseButton::Left) {
+                match gs.mouse_state {
+                    MouseState::Normal => {}
+                    MouseState::Clicked => {
+                        gs.mouse_state = MouseState::Normal;
+                    }
+                    MouseState::Picked(pp) => {
+                        let mx = mouse_pos.x as u32;
+                        let my = mouse_pos.y as u32;
+                        let file = ((mx - boardx) / piece_size) as usize;
+                        let rank = ((my - boardy) / piece_size) as usize;
+                    }
+                }
+            }
+        }
+
+        // Get the picked piece (if any)
+        let picked_tex = if let MouseState::Picked(pp) = gs.mouse_state {
+            let piece_img = img_cache.get_piece(pp.piece, pp.colour, piece_size);
+            let piece_tex = Texture2D::from(piece_img);
+            Some(piece_tex)
+        } else {
+            None
+        };
+
+        // Generate textures for board and pieces
+        let board_img = img_cache.get_board(board_size);
+        let board_tex = Texture2D::from(board_img);
+
+        let mut piece_list = Vec::new();
+        let board = gs.game.board();
+        for (rank, rp) in board.iter().enumerate() {
+            for (file, pos) in rp.iter().enumerate() {
+                let (Position::Occupied(piece, col) | Position::Picked(piece, col)) = pos else {
+                    continue;
+                };
+                let tint = if matches!(pos, Position::Occupied(_, _)) {
+                    WHITE
+                } else {
+                    WHITE.fade(0.5)
+                };
+                let piece_img = img_cache.get_piece(*piece, *col, piece_size);
+                let piece_tex = Texture2D::from(piece_img);
+                let xpos = boardx + file as u32 * piece_size;
+                let ypos = boardy + rank as u32 * piece_size;
+                piece_list.push((piece_tex, xpos, ypos, tint));
+            }
+        }
+
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
             board_tex.draw(boardx, boardy, WHITE);
-            for (piece_tex, xpos, ypos) in &piece_list {
-                piece_tex.draw(*xpos, *ypos, WHITE);
+            for (piece_tex, xpos, ypos, tint) in &piece_list {
+                piece_tex.draw(*xpos, *ypos, *tint);
+            }
+            if let Some(picked_tex) = &picked_tex {
+                let mx = mouse_pos.x as u32;
+                let my = mouse_pos.y as u32;
+                let x = mx - piece_size / 2;
+                let y = my - piece_size / 2;
+                picked_tex.draw(x, y, WHITE);
             }
         });
     }
@@ -129,4 +187,31 @@ impl ImageCache {
             new_img
         })
     }
+}
+
+fn board_size(width: u32, height: u32) -> u32 {
+    let min_dim = width.min(height);
+    let res = min_dim % chess::BOARD_SIZE as u32;
+    min_dim - res
+}
+
+#[derive(Debug)]
+struct GameState {
+    game: Game,
+    mouse_state: MouseState,
+}
+
+#[derive(Debug)]
+enum MouseState {
+    Normal,
+    Clicked,
+    Picked(PickedPiece),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PickedPiece {
+    piece: Piece,
+    colour: Colour,
+    rank: usize,
+    file: usize,
 }
