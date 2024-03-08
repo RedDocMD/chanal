@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
-pub use sys::{Color, WHITE};
+pub use sys::{Color, MouseCursor, Rectangle, Vector2, WHITE};
 
 mod sys {
-    use std::ffi::{c_char, c_int, c_uchar, c_uint, c_void};
+    use std::ffi::{c_char, c_float, c_int, c_uchar, c_uint, c_void};
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -42,6 +42,38 @@ mod sys {
         a: 255,
     };
 
+    #[repr(i32)]
+    #[derive(Clone, Copy)]
+    pub enum MouseCursor {
+        Default = 0,      // Default pointer shape
+        Arrow = 1,        // Arrow shape
+        Ibeam = 2,        // Text writing cursor shape
+        Crosshair = 3,    // Cross shape
+        PointingHand = 4, // Pointing hand cursor
+        ResizeEw = 5,     // Horizontal resize/move arrow shape
+        ResizeNs = 6,     // Vertical resize/move arrow shape
+        ResizeNwse = 7,   // Top-left to bottom-right diagonal resize/move arrow shape
+        ResizeNesw = 8,   // The top-right to bottom-left diagonal resize/move arrow shape
+        ResizeAll = 9,    // The omnidirectional resize/move cursor shape
+        NotAllowed = 10,  // The operation-not-allowed shape
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Rectangle {
+        pub x: c_float,
+        pub y: c_float,
+        pub width: c_float,
+        pub height: c_float,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Vector2 {
+        pub x: c_float,
+        pub y: c_float,
+    }
+
     #[link(name = "raylib")]
     extern "C" {
         pub fn InitWindow(width: c_int, height: c_int, title: *const c_char);
@@ -64,6 +96,11 @@ mod sys {
         pub fn BeginDrawing();
         pub fn EndDrawing();
         pub fn ClearBackground(color: Color);
+
+        pub fn SetMouseCursor(cursor: c_int);
+        pub fn GetMousePosition() -> Vector2;
+
+        pub fn CheckCollisionPointRec(point: Vector2, rect: Rectangle) -> c_int;
     }
 }
 
@@ -193,4 +230,16 @@ pub fn do_draw(draw_fn: impl FnOnce()) {
 
 pub fn clear_background(col: Color) {
     unsafe { sys::ClearBackground(col) };
+}
+
+pub fn set_mouse_cursor(cursor: MouseCursor) {
+    unsafe { sys::SetMouseCursor(cursor as _) };
+}
+
+pub fn get_mouse_position() -> Vector2 {
+    unsafe { sys::GetMousePosition() }
+}
+
+pub fn check_collision_point_rect(point: Vector2, rect: Rectangle) -> bool {
+    unsafe { sys::CheckCollisionPointRec(point, rect) != 0 }
 }

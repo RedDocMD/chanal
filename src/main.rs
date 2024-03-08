@@ -4,7 +4,10 @@ use itertools::iproduct;
 
 use crate::{
     chess::{Colour, Game, Piece, Position},
-    raylib::{Image, ImgFormat, Texture2D, Window, WHITE},
+    raylib::{
+        check_collision_point_rect, get_mouse_position, set_mouse_cursor, Image, ImgFormat,
+        MouseCursor, Rectangle, Texture2D, Window, WHITE,
+    },
 };
 
 mod assets;
@@ -30,9 +33,11 @@ fn main() {
     win.set_target_fps(FPS);
     while !win.should_close() {
         let (width, height) = win.size();
+        let (boardx, boardy) = (0, 0);
         let board_size = board_size(width, height);
         let piece_size = board_size / chess::BOARD_SIZE as u32;
 
+        // Generate textures for board and pieces
         let board_img = img_cache.get_board(board_size);
         let board_tex = Texture2D::from(board_img);
 
@@ -43,16 +48,30 @@ fn main() {
                 if let &Position::Occupied(piece, col) = pos {
                     let piece_img = img_cache.get_piece(piece, col, piece_size);
                     let piece_tex = Texture2D::from(piece_img);
-                    let xpos = file as u32 * piece_size;
-                    let ypos = rank as u32 * piece_size;
+                    let xpos = boardx + file as u32 * piece_size;
+                    let ypos = boardy + rank as u32 * piece_size;
                     piece_list.push((piece_tex, xpos, ypos));
                 }
             }
         }
 
+        // Set cursor
+        let mouse_pos = get_mouse_position();
+        let board_rect = Rectangle {
+            x: boardx as _,
+            y: boardy as _,
+            width: board_size as _,
+            height: board_size as _,
+        };
+        if check_collision_point_rect(mouse_pos, board_rect) {
+            set_mouse_cursor(MouseCursor::PointingHand);
+        } else {
+            set_mouse_cursor(MouseCursor::Default);
+        }
+
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
-            board_tex.draw(0, 0, WHITE);
+            board_tex.draw(boardx, boardy, WHITE);
             for (piece_tex, xpos, ypos) in &piece_list {
                 piece_tex.draw(*xpos, *ypos, WHITE);
             }
