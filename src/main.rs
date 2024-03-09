@@ -33,6 +33,7 @@ fn main() {
         to_unmark: false,
     };
 
+    win.set_state([ConfigFlag::WindowResizable]);
     win.set_target_fps(FPS);
     while !win.should_close() {
         let (width, height) = win.size();

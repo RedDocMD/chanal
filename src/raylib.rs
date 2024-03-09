@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
-pub use sys::{MouseButton, MouseCursor, RaylibColour, Rectangle, TraceLogLevel, Vector2};
+pub use sys::{
+    ConfigFlag, MouseButton, MouseCursor, RaylibColour, Rectangle, TraceLogLevel, Vector2,
+};
 
 mod sys {
     use std::ffi::{c_char, c_float, c_int, c_uchar, c_uint, c_void};
@@ -99,6 +101,27 @@ mod sys {
         None,  // Disable logging
     }
 
+    #[repr(u32)]
+    #[allow(dead_code)]
+    pub enum ConfigFlag {
+        VsyncHint = 0x00000040,              // Set to try enabling V-Sync on GPU
+        FullscreenMode = 0x00000002,         // Set to run program in fullscreen
+        WindowResizable = 0x00000004,        // Set to allow resizable window
+        WindowUndecorated = 0x00000008,      // Set to disable window decoration (frame and buttons)
+        WindowHidden = 0x00000080,           // Set to hide window
+        WindowMinimized = 0x00000200,        // Set to minimize window (iconify)
+        WindowMaximized = 0x00000400,        // Set to maximize window (expanded to monitor)
+        WindowUnfocused = 0x00000800,        // Set to window non focused
+        WindowTopmost = 0x00001000,          // Set to window always on top
+        WindowAlwaysRun = 0x00000100,        // Set to allow windows running while minimized
+        WindowTransparent = 0x00000010,      // Set to allow transparent framebuffer
+        WindowHighdpi = 0x00002000,          // Set to support HighDPI
+        WindowMousePassthrough = 0x00004000, // Set to support mouse passthrough, only supported when FLAG_WINDOW_UNDECORATED
+        BorderlessWindowedMode = 0x00008000, // Set to run program in borderless windowed mode
+        Msaa4xHint = 0x00000020,             // Set to try enabling MSAA 4X
+        InterlacedHint = 0x00010000, // Set to try enabling interlaced video format (for V3D)
+    }
+
     #[link(name = "raylib")]
     extern "C" {
         pub fn InitWindow(width: c_int, height: c_int, title: *const c_char);
@@ -107,6 +130,7 @@ mod sys {
         pub fn SetTargetFPS(fps: c_int);
         pub fn GetRenderWidth() -> c_int;
         pub fn GetRenderHeight() -> c_int;
+        pub fn SetWindowState(flags: c_uint);
 
         pub fn LoadImageFromMemory(ext: *const c_char, data: *const c_uchar, size: c_int) -> Image;
         pub fn LoadImageSvg(file_name_or_str: *const c_char, width: c_int, height: c_int) -> Image;
@@ -181,6 +205,14 @@ impl Window {
         let width = unsafe { sys::GetRenderWidth() };
         let height = unsafe { sys::GetRenderHeight() };
         (width as _, height as _)
+    }
+
+    pub fn set_state(&mut self, flags: impl IntoIterator<Item = ConfigFlag>) {
+        let mut flags_val = 0u32;
+        for flag in flags.into_iter() {
+            flags_val |= flag as u32;
+        }
+        unsafe { sys::SetWindowState(flags_val) };
     }
 }
 
