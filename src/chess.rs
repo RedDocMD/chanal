@@ -596,10 +596,10 @@ impl Fen {
             let nf = file - diff;
             let pos = self.board[nr][nf];
             match pos {
-                Position::Empty => positions.push((rank, nf)),
+                Position::Empty => positions.push((nr, nf)),
                 Position::Occupied(_, nc) => {
                     if nc == colour.opposite() {
-                        positions.push((rank, nf));
+                        positions.push((nr, nf));
                     }
                     break;
                 }
@@ -611,10 +611,10 @@ impl Fen {
             let nf = file + diff;
             let pos = self.board[nr][nf];
             match pos {
-                Position::Empty => positions.push((rank, nf)),
+                Position::Empty => positions.push((nr, nf)),
                 Position::Occupied(_, nc) => {
                     if nc == colour.opposite() {
-                        positions.push((rank, nf));
+                        positions.push((nr, nf));
                     }
                     break;
                 }
@@ -626,10 +626,10 @@ impl Fen {
             let nf = file + diff;
             let pos = self.board[nr][nf];
             match pos {
-                Position::Empty => positions.push((rank, nf)),
+                Position::Empty => positions.push((nr, nf)),
                 Position::Occupied(_, nc) => {
                     if nc == colour.opposite() {
-                        positions.push((rank, nf));
+                        positions.push((nr, nf));
                     }
                     break;
                 }
@@ -641,10 +641,10 @@ impl Fen {
             let nf = file - diff;
             let pos = self.board[nr][nf];
             match pos {
-                Position::Empty => positions.push((rank, nf)),
+                Position::Empty => positions.push((nr, nf)),
                 Position::Occupied(_, nc) => {
                     if nc == colour.opposite() {
-                        positions.push((rank, nf));
+                        positions.push((nr, nf));
                     }
                     break;
                 }

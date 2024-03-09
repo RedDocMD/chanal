@@ -12,7 +12,7 @@ const MARK_COLOUR: RaylibColour = RaylibColour {
     r: 31,
     g: 102,
     b: 77,
-    a: 130,
+    a: 180,
 };
 
 fn main() {
