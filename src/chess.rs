@@ -365,6 +365,10 @@ impl Move {
     pub fn has_capture(&self) -> bool {
         self.capture.is_some()
     }
+
+    pub fn has_check(&self) -> bool {
+        self.check_cnt > 0
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

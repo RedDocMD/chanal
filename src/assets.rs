@@ -31,3 +31,7 @@ pub fn merida_piece_data(piece: Piece, colour: Colour) -> &'static [u8] {
         (Piece::Queen, Colour::Black) => MERIDA_BLACK_QUEEN,
     }
 }
+
+pub static MOVE_OGG: &[u8] = include_bytes!("assets/sounds/Move.ogg");
+pub static CAPTURE_OGG: &[u8] = include_bytes!("assets/sounds/Capture.ogg");
+pub static CHECK_OGG: &[u8] = include_bytes!("assets/sounds/Check.ogg");

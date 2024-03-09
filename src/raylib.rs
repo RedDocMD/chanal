@@ -122,6 +122,33 @@ mod sys {
         InterlacedHint = 0x00010000, // Set to try enabling interlaced video format (for V3D)
     }
 
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Wave {
+        frame_count: c_uint,
+        sample_rate: c_uint,
+        sample_size: c_uint,
+        channels: c_uint,
+        data: *mut c_void,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct AudioStream {
+        buffer: *mut c_void,
+        processor: *mut c_void,
+        sample_rate: c_uint,
+        sample_size: c_uint,
+        channels: c_uint,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Sound {
+        audio_stream: AudioStream,
+        frame_count: c_uint,
+    }
+
     #[link(name = "raylib")]
     extern "C" {
         pub fn InitWindow(width: c_int, height: c_int, title: *const c_char);
@@ -174,6 +201,18 @@ mod sys {
             colour: RaylibColour,
         );
         pub fn DrawCircle(center_x: c_int, center_y: c_int, radius: c_float, colour: RaylibColour);
+
+        pub fn InitAudioDevice();
+        pub fn CloseAudioDevice();
+        pub fn LoadWaveFromMemory(
+            file_type: *const c_char,
+            file_data: *const c_uchar,
+            data_size: c_int,
+        ) -> Wave;
+        pub fn LoadSoundFromWave(wave: Wave) -> Sound;
+        pub fn UnloadWave(wave: Wave);
+        pub fn UnloadSound(sound: Sound);
+        pub fn PlaySound(sound: Sound);
     }
 }
 
@@ -219,6 +258,76 @@ impl Window {
 impl Drop for Window {
     fn drop(&mut self) {
         unsafe { sys::CloseWindow() };
+    }
+}
+
+pub struct AudioDevice;
+
+impl AudioDevice {
+    pub fn new() -> Self {
+        unsafe { sys::InitAudioDevice() };
+        Self
+    }
+}
+
+impl Drop for AudioDevice {
+    fn drop(&mut self) {
+        unsafe { sys::CloseAudioDevice() };
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum WaveFormat {
+    Ogg,
+}
+
+impl WaveFormat {
+    pub fn to_cstr(self) -> &'static CStr {
+        match self {
+            WaveFormat::Ogg => CStr::from_bytes_with_nul(b".ogg\0").unwrap(),
+        }
+    }
+}
+
+pub struct Wave {
+    wave: sys::Wave,
+}
+
+impl Wave {
+    pub fn from_mem(format: WaveFormat, data: &[u8]) -> Self {
+        let wave = unsafe {
+            sys::LoadWaveFromMemory(format.to_cstr().as_ptr(), data.as_ptr(), data.len() as _)
+        };
+        Self { wave }
+    }
+}
+
+impl Drop for Wave {
+    fn drop(&mut self) {
+        unsafe { sys::UnloadWave(self.wave) };
+    }
+}
+
+pub struct Sound {
+    sound: sys::Sound,
+}
+
+impl Sound {
+    pub fn play(&self) {
+        unsafe { sys::PlaySound(self.sound) };
+    }
+}
+
+impl From<&Wave> for Sound {
+    fn from(wave: &Wave) -> Self {
+        let sound = unsafe { sys::LoadSoundFromWave(wave.wave) };
+        Self { sound }
+    }
+}
+
+impl Drop for Sound {
+    fn drop(&mut self) {
+        unsafe { sys::UnloadSound(self.sound) };
     }
 }
 

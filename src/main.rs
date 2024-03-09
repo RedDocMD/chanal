@@ -32,6 +32,14 @@ fn main() {
         marked_square: None,
         to_unmark: false,
     };
+    let _audio_dev = AudioDevice::new();
+
+    let move_wave = Wave::from_mem(WaveFormat::Ogg, assets::MOVE_OGG);
+    let move_sound = Sound::from(&move_wave);
+    let capture_wave = Wave::from_mem(WaveFormat::Ogg, assets::CAPTURE_OGG);
+    let capture_sound = Sound::from(&capture_wave);
+    let check_wave = Wave::from_mem(WaveFormat::Ogg, assets::CHECK_OGG);
+    let check_sound = Sound::from(&check_wave);
 
     win.set_state([ConfigFlag::WindowResizable]);
     win.set_target_fps(FPS);
@@ -102,11 +110,19 @@ fn main() {
                         let rank = ((my - boardy) / piece_size) as usize;
 
                         gs.mouse_state = MouseState::Normal;
-                        if let Some(mov) = gs.legal_moves.get(&(rank, file)) {
-                            gs.game.apply_move(*mov);
+                        if let Some(&mov) = gs.legal_moves.get(&(rank, file)) {
+                            gs.game.apply_move(mov);
                             gs.marked_square = None;
                             gs.legal_moves.clear();
                             gs.to_unmark = false;
+
+                            if mov.has_check() {
+                                check_sound.play();
+                            } else if mov.has_capture() {
+                                capture_sound.play();
+                            } else {
+                                move_sound.play();
+                            }
                         } else {
                             gs.game.board_mut()[pp.rank][pp.file] =
                                 Position::Occupied(pp.piece, pp.colour);
