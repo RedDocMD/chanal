@@ -302,6 +302,10 @@ impl Game {
     pub fn to_move(&self) -> Colour {
         self.fen.to_move
     }
+
+    pub fn legal_moves(&self, rank: usize, file: usize) -> HashMap<(usize, usize), Move> {
+        self.fen.legal_moves(rank, file)
+    }
 }
 
 #[derive(Debug)]
@@ -318,7 +322,7 @@ struct Fen {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Move {
+pub struct Move {
     piece: Piece,
     colour: Colour,
     from: (usize, usize),

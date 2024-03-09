@@ -8,6 +8,13 @@ mod assets;
 mod chess;
 mod raylib;
 
+const MARK_COLOUR: RaylibColour = RaylibColour {
+    r: 31,
+    g: 102,
+    b: 77,
+    a: 130,
+};
+
 fn main() {
     set_trace_log_level(TraceLogLevel::Error);
 
@@ -21,6 +28,9 @@ fn main() {
     let mut gs = GameState {
         game: Game::new(),
         mouse_state: MouseState::Normal,
+        legal_moves: HashMap::new(),
+        marked_square: None,
+        to_unmark: false,
     };
 
     win.set_target_fps(FPS);
@@ -64,6 +74,13 @@ fn main() {
                             };
                             gs.mouse_state = MouseState::Picked(pp);
                             gs.game.board_mut()[rank][file] = Position::Picked(piece, colour);
+                            gs.legal_moves = gs.game.legal_moves(rank, file);
+                            if let Some((or, of)) = gs.marked_square {
+                                gs.to_unmark = or == rank && of == file;
+                            } else {
+                                gs.to_unmark = false;
+                            }
+                            gs.marked_square = Some((rank, file));
                         } else {
                             gs.mouse_state = MouseState::Clicked;
                         }
@@ -82,6 +99,17 @@ fn main() {
                         let my = mouse_pos.y as u32;
                         let file = ((mx - boardx) / piece_size) as usize;
                         let rank = ((my - boardy) / piece_size) as usize;
+
+                        if file == pp.file && rank == pp.rank {
+                            gs.mouse_state = MouseState::Normal;
+                            gs.game.board_mut()[pp.rank][pp.file] =
+                                Position::Occupied(pp.piece, pp.colour);
+                        }
+
+                        if gs.to_unmark {
+                            gs.marked_square = None;
+                            gs.legal_moves.clear();
+                        }
                     }
                 }
             }
@@ -129,9 +157,20 @@ fn main() {
             if let Some(picked_tex) = &picked_tex {
                 let mx = mouse_pos.x as u32;
                 let my = mouse_pos.y as u32;
-                let x = mx - piece_size / 2;
-                let y = my - piece_size / 2;
+                let x = (mx as i32 - piece_size as i32 / 2).max(0) as u32;
+                let y = (my as i32 - piece_size as i32 / 2).max(0) as u32;
                 picked_tex.draw(x, y, WHITE);
+            }
+            if let Some((rank, file)) = gs.marked_square {
+                let x = boardx + file as u32 * piece_size;
+                let y = boardy + rank as u32 * piece_size;
+                draw_rectangle(x, y, piece_size, piece_size, MARK_COLOUR);
+            }
+            for &(rank, file) in gs.legal_moves.keys() {
+                let x = boardx + file as u32 * piece_size + piece_size / 2;
+                let y = boardy + rank as u32 * piece_size + piece_size / 2;
+                let radius = piece_size as f32 / 5.0;
+                draw_circle(x, y, radius, MARK_COLOUR);
             }
         });
     }
@@ -199,6 +238,9 @@ fn board_size(width: u32, height: u32) -> u32 {
 struct GameState {
     game: Game,
     mouse_state: MouseState,
+    legal_moves: HashMap<(usize, usize), Move>,
+    marked_square: Option<(usize, usize)>,
+    to_unmark: bool,
 }
 
 #[derive(Debug)]

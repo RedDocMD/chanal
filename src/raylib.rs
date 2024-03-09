@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
-pub use sys::{Color, MouseButton, MouseCursor, Rectangle, TraceLogLevel, Vector2};
+pub use sys::{MouseButton, MouseCursor, RaylibColour, Rectangle, TraceLogLevel, Vector2};
 
 mod sys {
     use std::ffi::{c_char, c_float, c_int, c_uchar, c_uint, c_void};
@@ -28,14 +28,14 @@ mod sys {
 
     #[repr(C)]
     #[derive(Clone, Copy)]
-    pub struct Color {
+    pub struct RaylibColour {
         pub r: c_uchar,
         pub g: c_uchar,
         pub b: c_uchar,
         pub a: c_uchar,
     }
 
-    impl Color {
+    impl RaylibColour {
         pub fn fade(self, factor: f32) -> Self {
             unsafe { Fade(self, factor) }
         }
@@ -116,11 +116,11 @@ mod sys {
 
         pub fn LoadTextureFromImage(image: Image) -> Texture2D;
         pub fn UnloadTexture(texture: Texture2D);
-        pub fn DrawTexture(texture: Texture2D, xpos: c_int, ypos: c_int, tint: Color);
+        pub fn DrawTexture(texture: Texture2D, xpos: c_int, ypos: c_int, tint: RaylibColour);
 
         pub fn BeginDrawing();
         pub fn EndDrawing();
-        pub fn ClearBackground(color: Color);
+        pub fn ClearBackground(color: RaylibColour);
 
         pub fn SetMouseCursor(cursor: c_int);
         pub fn GetMousePosition() -> Vector2;
@@ -129,13 +129,22 @@ mod sys {
 
         pub fn CheckCollisionPointRec(point: Vector2, rect: Rectangle) -> c_int;
 
-        pub fn Fade(col: Color, alpha: c_float) -> Color;
+        pub fn Fade(col: RaylibColour, alpha: c_float) -> RaylibColour;
 
         pub fn SetTraceLogLevel(log_level: c_int);
+
+        pub fn DrawRectangle(
+            pos_x: c_int,
+            pos_y: c_int,
+            width: c_int,
+            height: c_int,
+            colour: RaylibColour,
+        );
+        pub fn DrawCircle(center_x: c_int, center_y: c_int, radius: c_float, colour: RaylibColour);
     }
 }
 
-pub const WHITE: Color = Color {
+pub const WHITE: RaylibColour = RaylibColour {
     r: 255,
     g: 255,
     b: 255,
@@ -242,7 +251,7 @@ pub struct Texture2D {
 }
 
 impl Texture2D {
-    pub fn draw(&self, x: u32, y: u32, tint: Color) {
+    pub fn draw(&self, x: u32, y: u32, tint: RaylibColour) {
         unsafe { sys::DrawTexture(self.tex, x as _, y as _, tint) };
     }
 }
@@ -266,7 +275,7 @@ pub fn do_draw(draw_fn: impl FnOnce()) {
     unsafe { sys::EndDrawing() };
 }
 
-pub fn clear_background(col: Color) {
+pub fn clear_background(col: RaylibColour) {
     unsafe { sys::ClearBackground(col) };
 }
 
@@ -292,4 +301,12 @@ pub fn is_mouse_button_released(mb: MouseButton) -> bool {
 
 pub fn set_trace_log_level(level: TraceLogLevel) {
     unsafe { sys::SetTraceLogLevel(level as _) };
+}
+
+pub fn draw_rectangle(x: u32, y: u32, width: u32, height: u32, colour: RaylibColour) {
+    unsafe { sys::DrawRectangle(x as _, y as _, width as _, height as _, colour) };
+}
+
+pub fn draw_circle(x: u32, y: u32, radius: f32, colour: RaylibColour) {
+    unsafe { sys::DrawCircle(x as _, y as _, radius as _, colour) };
 }
