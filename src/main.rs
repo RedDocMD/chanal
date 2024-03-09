@@ -100,8 +100,13 @@ fn main() {
                         let file = ((mx - boardx) / piece_size) as usize;
                         let rank = ((my - boardy) / piece_size) as usize;
 
-                        if file == pp.file && rank == pp.rank {
-                            gs.mouse_state = MouseState::Normal;
+                        gs.mouse_state = MouseState::Normal;
+                        if let Some(mov) = gs.legal_moves.get(&(rank, file)) {
+                            gs.game.apply_move(*mov);
+                            gs.marked_square = None;
+                            gs.legal_moves.clear();
+                            gs.to_unmark = false;
+                        } else {
                             gs.game.board_mut()[pp.rank][pp.file] =
                                 Position::Occupied(pp.piece, pp.colour);
                         }

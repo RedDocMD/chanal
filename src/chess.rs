@@ -282,13 +282,17 @@ fn king_distance_positions(rank: usize, file: usize) -> Vec<(usize, usize)> {
 #[derive(Debug)]
 pub struct Game {
     fen: Fen,
+    moves: Vec<Move>,
 }
 
 impl Game {
     pub fn new() -> Self {
         const INIT_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         let fen = INIT_FEN.parse::<Fen>().unwrap();
-        Self { fen }
+        Self {
+            fen,
+            moves: Vec::new(),
+        }
     }
 
     pub fn board(&self) -> &Board {
@@ -305,6 +309,11 @@ impl Game {
 
     pub fn legal_moves(&self, rank: usize, file: usize) -> HashMap<(usize, usize), Move> {
         self.fen.legal_moves(rank, file)
+    }
+
+    pub fn apply_move(&mut self, mov: Move) {
+        self.fen.apply_move(mov);
+        self.moves.push(mov);
     }
 }
 
@@ -339,6 +348,58 @@ struct CapturedPiece {
 }
 
 impl Fen {
+    fn apply_move(&mut self, mov: Move) {
+        if mov.colour == Colour::Black {
+            self.move_cnt += 1;
+        }
+        self.board = self.board.apply_move(mov);
+        self.to_move = self.to_move.opposite();
+
+        // Update castling
+        if mov.colour == Colour::White {
+            if mov.piece == Piece::King {
+                self.white_king_castle = false;
+                self.white_queen_castle = false;
+            }
+            if mov.piece == Piece::Rook && mov.from == (7, 7) {
+                self.white_king_castle = false;
+            }
+            if mov.piece == Piece::Rook && mov.from == (7, 0) {
+                self.white_queen_castle = false;
+            }
+        } else {
+            if mov.piece == Piece::King {
+                self.black_king_castle = false;
+                self.black_queen_castle = false;
+            }
+            if mov.piece == Piece::Rook && mov.from == (0, 7) {
+                self.black_king_castle = false;
+            }
+            if mov.piece == Piece::Rook && mov.from == (0, 0) {
+                self.black_queen_castle = false;
+            }
+        }
+
+        // Update en-passant
+        if mov.piece == Piece::Pawn {
+            if mov.colour == Colour::White && mov.to.0 == 4 && mov.from.0 == 6 {
+                self.en_passant = Some((5, mov.to.1));
+            } else if mov.colour == Colour::Black && mov.to.1 == 3 && mov.from.0 == 1 {
+                self.en_passant = Some((2, mov.to.1));
+            } else {
+                self.en_passant = None;
+            }
+        } else {
+            self.en_passant = None;
+        }
+
+        if mov.piece != Piece::Pawn && mov.capture.is_none() {
+            self.halfmove_clock += 1;
+        } else {
+            self.halfmove_clock = 0;
+        }
+    }
+
     fn make_move(
         &self,
         piece: Piece,
@@ -394,6 +455,7 @@ impl Fen {
 
         let positions = match piece {
             Piece::Knight => knight_distance_positions(rank, file),
+            // FIXME: Handle castling
             Piece::King => king_distance_positions(rank, file),
             Piece::Rook => self.rook_move_positions(rank, file, colour),
             Piece::Bishop => self.bishop_move_positions(rank, file, colour),
@@ -403,6 +465,7 @@ impl Fen {
                 pos
             }
             Piece::Pawn => {
+                // FIXME: Handle en-passant captures
                 let mut positions = Vec::new();
                 if colour == Colour::White {
                     if rank > 0 && matches!(self.board[rank - 1][file], Position::Empty) {
