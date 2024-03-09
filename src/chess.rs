@@ -76,6 +76,10 @@ impl Board {
         let (tr, tf) = mov.to;
         let mut board = *self;
         board[fr][ff] = Position::Empty;
+        if let Some(cap) = mov.capture {
+            let (cr, cf) = cap.pos;
+            board[cr][cf] = Position::Empty;
+        }
         board[tr][tf] = Position::Occupied(mov.piece, mov.colour);
         if mov.piece == Piece::King {
             if mov.colour == Colour::White {
@@ -513,7 +517,6 @@ impl Fen {
                 pos
             }
             Piece::Pawn => {
-                // FIXME: Handle en-passant captures
                 let mut positions = Vec::new();
                 if colour == Colour::White {
                     if rank > 0 && matches!(self.board[rank - 1][file], Position::Empty) {
@@ -562,7 +565,57 @@ impl Fen {
                         positions.push((rank + 1, file + 1));
                     }
                 }
-                positions
+                let mut moves = positions
+                    .into_iter()
+                    .filter_map(|(nr, nf)| {
+                        self.make_move(piece, colour, rank, file, nr, nf)
+                            .map(|m| ((nr, nf), m))
+                    })
+                    .collect::<HashMap<_, _>>();
+                if let Some((epr, epf)) = self.en_passant {
+                    if epr == 2
+                        && colour == Colour::White
+                        && rank == 3
+                        && (file + 1 == epf || file == epf + 1)
+                    {
+                        let mut mov = Move {
+                            piece,
+                            colour,
+                            from: (rank, file),
+                            to: (epr, epf),
+                            capture: Some(CapturedPiece {
+                                piece: Piece::Pawn,
+                                colour: Colour::Black,
+                                pos: (3, epf),
+                            }),
+                            check_cnt: 0,
+                        };
+                        if self.board.move_verify_checks(&mut mov) {
+                            moves.insert((epr, epf), mov);
+                        }
+                    } else if epr == 5
+                        && colour == Colour::Black
+                        && rank == 4
+                        && (file + 1 == epf || file == epf + 1)
+                    {
+                        let mut mov = Move {
+                            piece,
+                            colour,
+                            from: (rank, file),
+                            to: (epr, epf),
+                            capture: Some(CapturedPiece {
+                                piece: Piece::Pawn,
+                                colour: Colour::Black,
+                                pos: (4, epf),
+                            }),
+                            check_cnt: 0,
+                        };
+                        if self.board.move_verify_checks(&mut mov) {
+                            moves.insert((epr, epf), mov);
+                        }
+                    }
+                }
+                return moves;
             }
         };
 
