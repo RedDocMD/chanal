@@ -77,6 +77,23 @@ impl Board {
         let mut board = *self;
         board[fr][ff] = Position::Empty;
         board[tr][tf] = Position::Occupied(mov.piece, mov.colour);
+        if mov.piece == Piece::King {
+            if mov.colour == Colour::White {
+                if mov.from == (7, 4) && mov.to == (7, 6) {
+                    board[7][7] = Position::Empty;
+                    board[7][5] = Position::Occupied(Piece::Rook, Colour::White);
+                } else if mov.from == (7, 4) && mov.to == (7, 2) {
+                    board[7][0] = Position::Empty;
+                    board[7][3] = Position::Occupied(Piece::Rook, Colour::White);
+                }
+            } else if mov.from == (0, 4) && mov.to == (0, 6) {
+                board[0][7] = Position::Empty;
+                board[0][5] = Position::Occupied(Piece::Rook, Colour::Black);
+            } else if mov.from == (0, 4) && mov.to == (0, 2) {
+                board[0][0] = Position::Empty;
+                board[0][3] = Position::Occupied(Piece::Rook, Colour::Black);
+            }
+        }
         board
     }
 
@@ -455,8 +472,39 @@ impl Fen {
 
         let positions = match piece {
             Piece::Knight => knight_distance_positions(rank, file),
-            // FIXME: Handle castling
-            Piece::King => king_distance_positions(rank, file),
+            Piece::King => {
+                let mut positions = king_distance_positions(rank, file);
+                if colour == Colour::White {
+                    if self.white_king_castle
+                        && matches!(self.board[7][5], Position::Empty)
+                        && matches!(self.board[7][6], Position::Empty)
+                    {
+                        positions.push((7, 6));
+                    }
+                    if self.white_queen_castle
+                        && matches!(self.board[7][1], Position::Empty)
+                        && matches!(self.board[7][2], Position::Empty)
+                        && matches!(self.board[7][3], Position::Empty)
+                    {
+                        positions.push((7, 2));
+                    }
+                } else {
+                    if self.black_king_castle
+                        && matches!(self.board[0][5], Position::Empty)
+                        && matches!(self.board[0][6], Position::Empty)
+                    {
+                        positions.push((0, 6));
+                    }
+                    if self.black_queen_castle
+                        && matches!(self.board[0][1], Position::Empty)
+                        && matches!(self.board[0][2], Position::Empty)
+                        && matches!(self.board[0][3], Position::Empty)
+                    {
+                        positions.push((0, 2));
+                    }
+                }
+                positions
+            }
             Piece::Rook => self.rook_move_positions(rank, file, colour),
             Piece::Bishop => self.bishop_move_positions(rank, file, colour),
             Piece::Queen => {
