@@ -361,6 +361,12 @@ pub struct Move {
     check_cnt: usize,
 }
 
+impl Move {
+    pub fn has_capture(&self) -> bool {
+        self.capture.is_some()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct CapturedPiece {
     piece: Piece,

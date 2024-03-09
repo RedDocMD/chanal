@@ -113,6 +113,15 @@ mod sys {
         pub fn UnloadImage(image: Image);
         pub fn ImageResize(image: *mut Image, newWidth: c_int, newHeight: c_int);
         pub fn ImageCopy(image: Image) -> Image;
+        pub fn GenImageColor(width: c_int, height: c_int, color: RaylibColour) -> Image;
+        pub fn ImageAlphaMask(image: *mut Image, mask: Image);
+        pub fn ImageDrawCircle(
+            image: *mut Image,
+            x: c_int,
+            y: c_int,
+            radius: c_int,
+            color: RaylibColour,
+        );
 
         pub fn LoadTextureFromImage(image: Image) -> Texture2D;
         pub fn UnloadTexture(texture: Texture2D);
@@ -224,12 +233,27 @@ impl Image {
         Self { img }
     }
 
+    pub fn gen_colour(width: u32, height: u32, colour: RaylibColour) -> Self {
+        let img = unsafe { sys::GenImageColor(width as _, height as _, colour) };
+        Self { img }
+    }
+
     pub fn size(&self) -> (u32, u32) {
         (self.img.width as _, self.img.height as _)
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        unsafe { sys::ImageResize(&mut self.img as *mut sys::Image, width as _, height as _) };
+        unsafe { sys::ImageResize(&mut self.img as *mut _, width as _, height as _) };
+    }
+
+    pub fn alpha_mask(&mut self, mask: &Image) {
+        unsafe { sys::ImageAlphaMask(&mut self.img as *mut _, mask.img) };
+    }
+
+    pub fn draw_circle(&mut self, x: u32, y: u32, radius: u32, colour: RaylibColour) {
+        unsafe {
+            sys::ImageDrawCircle(&mut self.img as *mut _, x as _, y as _, radius as _, colour)
+        };
     }
 }
 

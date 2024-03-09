@@ -18,8 +18,8 @@ const MARK_COLOUR: RaylibColour = RaylibColour {
 fn main() {
     set_trace_log_level(TraceLogLevel::Error);
 
-    const DEFAULT_WIN_WIDTH: u32 = 500;
-    const DEFAULT_WIN_HEIGHT: u32 = 500;
+    const DEFAULT_WIN_WIDTH: u32 = 496;
+    const DEFAULT_WIN_HEIGHT: u32 = 496;
     const TITLE: &str = "Chanal";
     const FPS: u32 = 60;
 
@@ -153,9 +153,53 @@ fn main() {
             }
         }
 
+        let mut cap_img = Image::gen_colour(piece_size, piece_size, MARK_COLOUR);
+        let mut mask_img = Image::gen_colour(
+            piece_size,
+            piece_size,
+            RaylibColour {
+                r: MARK_COLOUR.a,
+                g: MARK_COLOUR.a,
+                b: MARK_COLOUR.a,
+                a: MARK_COLOUR.a,
+            },
+        );
+        mask_img.draw_circle(
+            piece_size / 2,
+            piece_size / 2,
+            ((piece_size / 2) as f32 * 1.15) as u32,
+            RaylibColour {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            },
+        );
+        cap_img.alpha_mask(&mask_img);
+        let cap_tex = Texture2D::from(&cap_img);
+
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
             board_tex.draw(boardx, boardy, WHITE);
+
+            if let Some((rank, file)) = gs.marked_square {
+                let x = boardx + file as u32 * piece_size;
+                let y = boardy + rank as u32 * piece_size;
+                draw_rectangle(x, y, piece_size, piece_size, MARK_COLOUR);
+            }
+            for (&(rank, file), mov) in &gs.legal_moves {
+                if mov.has_capture() {
+                    let x = boardx + file as u32 * piece_size;
+                    let y = boardy + rank as u32 * piece_size;
+                    cap_tex.draw(x, y, WHITE);
+                } else {
+                    let x = boardx + file as u32 * piece_size + piece_size / 2;
+                    let y = boardy + rank as u32 * piece_size + piece_size / 2;
+                    let radius = piece_size as f32 / 5.0;
+                    draw_circle(x, y, radius, MARK_COLOUR);
+                }
+            }
+
             for (piece_tex, xpos, ypos, tint) in &piece_list {
                 piece_tex.draw(*xpos, *ypos, *tint);
             }
@@ -165,17 +209,6 @@ fn main() {
                 let x = (mx as i32 - piece_size as i32 / 2).max(0) as u32;
                 let y = (my as i32 - piece_size as i32 / 2).max(0) as u32;
                 picked_tex.draw(x, y, WHITE);
-            }
-            if let Some((rank, file)) = gs.marked_square {
-                let x = boardx + file as u32 * piece_size;
-                let y = boardy + rank as u32 * piece_size;
-                draw_rectangle(x, y, piece_size, piece_size, MARK_COLOUR);
-            }
-            for &(rank, file) in gs.legal_moves.keys() {
-                let x = boardx + file as u32 * piece_size + piece_size / 2;
-                let y = boardy + rank as u32 * piece_size + piece_size / 2;
-                let radius = piece_size as f32 / 5.0;
-                draw_circle(x, y, radius, MARK_COLOUR);
             }
         });
     }
