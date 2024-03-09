@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
@@ -19,6 +20,15 @@ pub enum Colour {
     Black,
 }
 
+impl Colour {
+    const fn opposite(self) -> Self {
+        match self {
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Position {
     Empty,
@@ -28,7 +38,7 @@ pub enum Position {
 
 pub const BOARD_SIZE: usize = 8;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Board(pub [[Position; BOARD_SIZE]; BOARD_SIZE]);
 
 impl Deref for Board {
@@ -43,6 +53,230 @@ impl DerefMut for Board {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
+}
+
+#[derive(Debug, Default)]
+struct KingCheckCnt {
+    white: usize,
+    black: usize,
+}
+
+impl KingCheckCnt {
+    fn check_cnt(&self, colour: Colour) -> usize {
+        match colour {
+            Colour::White => self.white,
+            Colour::Black => self.black,
+        }
+    }
+}
+
+impl Board {
+    fn apply_move(&self, mov: Move) -> Board {
+        let (fr, ff) = mov.from;
+        let (tr, tf) = mov.to;
+        let mut board = *self;
+        board[fr][ff] = Position::Empty;
+        board[tr][tf] = Position::Occupied(mov.piece, mov.colour);
+        board
+    }
+
+    fn move_verify_checks(&self, mov: &mut Move) -> bool {
+        let nb = self.apply_move(*mov);
+        let kic = nb.king_check_cnt();
+        if kic.check_cnt(mov.colour) != 0 {
+            false
+        } else {
+            mov.check_cnt = kic.check_cnt(mov.colour.opposite());
+            true
+        }
+    }
+
+    fn king_check_cnt(&self) -> KingCheckCnt {
+        let mut kic = KingCheckCnt::default();
+        for rank in 0..BOARD_SIZE {
+            for file in 0..BOARD_SIZE {
+                let pos = self[rank][file];
+                if let Position::Occupied(Piece::King, Colour::White) = pos {
+                    kic.white = self.king_check_cnt_colour(rank, file, Colour::White);
+                } else if let Position::Occupied(Piece::King, Colour::Black) = pos {
+                    kic.black = self.king_check_cnt_colour(rank, file, Colour::Black);
+                }
+            }
+        }
+        kic
+    }
+
+    fn king_check_cnt_colour(&self, rank: usize, file: usize, colour: Colour) -> usize {
+        let mut check_cnt = 0;
+        // Find knight checks
+        for (nr, nf) in knight_distance_positions(rank, file) {
+            let pos = self[nr][nf];
+            if matches!(pos, Position::Occupied(Piece::Knight, col) if col == colour.opposite()) {
+                check_cnt += 1;
+            }
+        }
+        // Find file checks (from rook and queen)
+        for nr in (0..rank).rev() {
+            let pos = self[nr][file];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Rook || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        for nr in rank + 1..BOARD_SIZE {
+            let pos = self[nr][file];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Rook || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        // Find rank checks (from rook and queen)
+        for nf in (0..file).rev() {
+            let pos = self[rank][nf];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Rook || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        for nf in file + 1..BOARD_SIZE {
+            let pos = self[rank][nf];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Rook || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        // Find diagonal checks (from queen and bishop)
+        for diff in 1..=rank.min(file) {
+            let nr = rank - diff;
+            let nf = file - diff;
+            let pos = self[nr][nf];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Bishop || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        for diff in 1..(BOARD_SIZE - rank).min(BOARD_SIZE - file) {
+            let nr = rank + diff;
+            let nf = file + diff;
+            let pos = self[nr][nf];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Bishop || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        for diff in 1..rank.min(BOARD_SIZE - file) {
+            let nr = rank - diff;
+            let nf = file + diff;
+            let pos = self[nr][nf];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Bishop || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        for diff in 1..(BOARD_SIZE - rank).min(file) {
+            let nr = rank + diff;
+            let nf = file - diff;
+            let pos = self[nr][nf];
+            match pos {
+                Position::Empty | Position::Picked(_, _) => continue,
+                Position::Occupied(np, nc) => {
+                    if nc == colour.opposite() && (np == Piece::Bishop || np == Piece::Queen) {
+                        check_cnt += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        // Find pawn checks
+        for (nr, nf) in attacking_pawn_positions(rank, file, colour) {
+            let pos = self[nr][nf];
+            if matches!(pos, Position::Occupied(Piece::Pawn, col) if col == colour.opposite()) {
+                check_cnt += 1;
+            }
+        }
+        check_cnt
+    }
+}
+
+fn diff_positions(
+    rank: usize,
+    file: usize,
+    rank_diff: &[isize],
+    file_diff: &[isize],
+) -> Vec<(usize, usize)> {
+    rank_diff
+        .iter()
+        .zip(file_diff)
+        .filter_map(|(rd, fd)| {
+            let new_rank = rank as isize + *rd;
+            let new_file = file as isize + *fd;
+            if new_rank < 0
+                || new_rank >= BOARD_SIZE as isize
+                || new_file < 0
+                || new_file >= BOARD_SIZE as isize
+            {
+                None
+            } else {
+                Some((new_rank as usize, new_file as usize))
+            }
+        })
+        .collect()
+}
+
+fn attacking_pawn_positions(rank: usize, file: usize, colour: Colour) -> Vec<(usize, usize)> {
+    let (rank_diff, file_diff) = if colour == Colour::Black {
+        ([1, 1], [-1, 1])
+    } else {
+        ([-1, -1], [-1, 1])
+    };
+    diff_positions(rank, file, &rank_diff, &file_diff)
+}
+
+fn knight_distance_positions(rank: usize, file: usize) -> Vec<(usize, usize)> {
+    const RANK_DIFF: [isize; 8] = [-2, -2, 2, 2, -1, -1, 1, 1];
+    const FILE_DIFF: [isize; 8] = [-1, 1, -1, 1, -2, 2, -2, 2];
+    diff_positions(rank, file, &RANK_DIFF, &FILE_DIFF)
+}
+
+fn king_distance_positions(rank: usize, file: usize) -> Vec<(usize, usize)> {
+    const RANK_DIFF: [isize; 8] = [-1, 0, 1, -1, 1, -1, 0, 1];
+    const FILE_DIFF: [isize; 8] = [-1, -1, -1, 0, 0, 1, 1, 1];
+    diff_positions(rank, file, &RANK_DIFF, &FILE_DIFF)
 }
 
 #[derive(Debug)]
@@ -81,6 +315,277 @@ struct Fen {
     en_passant: Option<(usize, usize)>,
     halfmove_clock: u32,
     move_cnt: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Move {
+    piece: Piece,
+    colour: Colour,
+    from: (usize, usize),
+    to: (usize, usize),
+    capture: Option<CapturedPiece>,
+    check_cnt: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CapturedPiece {
+    piece: Piece,
+    colour: Colour,
+    pos: (usize, usize),
+}
+
+impl Fen {
+    fn make_move(
+        &self,
+        piece: Piece,
+        colour: Colour,
+        rank: usize,
+        file: usize,
+        new_rank: usize,
+        new_file: usize,
+    ) -> Option<Move> {
+        let pos = self.board[new_rank][new_file];
+        let mut mov = match pos {
+            Position::Empty => Move {
+                piece,
+                colour,
+                from: (rank, file),
+                to: (new_rank, new_file),
+                capture: None,
+                check_cnt: 0,
+            },
+            Position::Occupied(np, nc) => {
+                if nc == colour {
+                    return None;
+                } else {
+                    Move {
+                        piece,
+                        colour,
+                        from: (rank, file),
+                        to: (new_rank, new_file),
+                        capture: Some(CapturedPiece {
+                            piece: np,
+                            colour: nc,
+                            pos: (new_rank, new_file),
+                        }),
+                        check_cnt: 0,
+                    }
+                }
+            }
+            Position::Picked(_, _) => return None,
+        };
+        if self.board.move_verify_checks(&mut mov) {
+            Some(mov)
+        } else {
+            None
+        }
+    }
+
+    pub fn legal_moves(&self, rank: usize, file: usize) -> HashMap<(usize, usize), Move> {
+        let (Position::Occupied(piece, colour) | Position::Picked(piece, colour)) =
+            self.board[rank][file]
+        else {
+            return HashMap::new();
+        };
+
+        let positions = match piece {
+            Piece::Knight => knight_distance_positions(rank, file),
+            Piece::King => king_distance_positions(rank, file),
+            Piece::Rook => self.rook_move_positions(rank, file, colour),
+            Piece::Bishop => self.bishop_move_positions(rank, file, colour),
+            Piece::Queen => {
+                let mut pos = self.rook_move_positions(rank, file, colour);
+                pos.extend(self.bishop_move_positions(rank, file, colour));
+                pos
+            }
+            Piece::Pawn => {
+                let mut positions = Vec::new();
+                if colour == Colour::White {
+                    if rank > 0 && matches!(self.board[rank - 1][file], Position::Empty) {
+                        positions.push((rank - 1, file));
+                    }
+                    if rank == 6
+                        && matches!(self.board[rank - 1][file], Position::Empty)
+                        && matches!(self.board[rank - 2][file], Position::Empty)
+                    {
+                        positions.push((rank - 2, file));
+                    }
+                    if rank > 0
+                        && file > 0
+                        && matches!(self.board[rank - 1][file - 1], Position::Occupied(_, nc) if nc == colour.opposite())
+                    {
+                        positions.push((rank - 1, file - 1));
+                    }
+                    if rank > 0
+                        && file < BOARD_SIZE - 1
+                        && matches!(self.board[rank - 1][file + 1], Position::Occupied(_, nc) if nc == colour.opposite())
+                    {
+                        positions.push((rank - 1, file + 1));
+                    }
+                } else {
+                    if rank < BOARD_SIZE - 1
+                        && matches!(self.board[rank + 1][file], Position::Empty)
+                    {
+                        positions.push((rank + 1, file));
+                    }
+                    if rank == 1
+                        && matches!(self.board[rank + 1][file], Position::Empty)
+                        && matches!(self.board[rank + 2][file], Position::Empty)
+                    {
+                        positions.push((rank + 2, file));
+                    }
+                    if rank < BOARD_SIZE - 1
+                        && file > 0
+                        && matches!(self.board[rank + 1][file - 1], Position::Occupied(_, nc) if nc == colour.opposite())
+                    {
+                        positions.push((rank + 1, file - 1));
+                    }
+                    if rank < BOARD_SIZE - 1
+                        && file < BOARD_SIZE - 1
+                        && matches!(self.board[rank + 1][file + 1], Position::Occupied(_, nc) if nc == colour.opposite())
+                    {
+                        positions.push((rank + 1, file + 1));
+                    }
+                }
+                positions
+            }
+        };
+
+        positions
+            .into_iter()
+            .filter_map(|(nr, nf)| {
+                self.make_move(piece, colour, rank, file, nr, nf)
+                    .map(|m| ((nr, nf), m))
+            })
+            .collect()
+    }
+
+    fn rook_move_positions(&self, rank: usize, file: usize, colour: Colour) -> Vec<(usize, usize)> {
+        let mut positions = Vec::new();
+        for nr in (0..rank).rev() {
+            let pos = self.board[nr][file];
+            match pos {
+                Position::Empty => positions.push((nr, file)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((nr, file));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        for nr in rank + 1..BOARD_SIZE {
+            let pos = self.board[nr][file];
+            match pos {
+                Position::Empty => positions.push((nr, file)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((nr, file));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        for nf in (0..file).rev() {
+            let pos = self.board[rank][nf];
+            match pos {
+                Position::Empty => positions.push((rank, nf)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((rank, nf));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        for nf in file + 1..BOARD_SIZE {
+            let pos = self.board[rank][nf];
+            match pos {
+                Position::Empty => positions.push((rank, nf)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((rank, nf));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        positions
+    }
+
+    fn bishop_move_positions(
+        &self,
+        rank: usize,
+        file: usize,
+        colour: Colour,
+    ) -> Vec<(usize, usize)> {
+        let mut positions = Vec::new();
+        for diff in 1..=rank.min(file) {
+            let nr = rank - diff;
+            let nf = file - diff;
+            let pos = self.board[nr][nf];
+            match pos {
+                Position::Empty => positions.push((rank, nf)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((rank, nf));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        for diff in 1..(BOARD_SIZE - rank).min(BOARD_SIZE - file) {
+            let nr = rank + diff;
+            let nf = file + diff;
+            let pos = self.board[nr][nf];
+            match pos {
+                Position::Empty => positions.push((rank, nf)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((rank, nf));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        for diff in 1..rank.min(BOARD_SIZE - file) {
+            let nr = rank - diff;
+            let nf = file + diff;
+            let pos = self.board[nr][nf];
+            match pos {
+                Position::Empty => positions.push((rank, nf)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((rank, nf));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        for diff in 1..(BOARD_SIZE - rank).min(file) {
+            let nr = rank + diff;
+            let nf = file - diff;
+            let pos = self.board[nr][nf];
+            match pos {
+                Position::Empty => positions.push((rank, nf)),
+                Position::Occupied(_, nc) => {
+                    if nc == colour.opposite() {
+                        positions.push((rank, nf));
+                    }
+                    break;
+                }
+                Position::Picked(_, _) => continue,
+            }
+        }
+        positions
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
