@@ -106,6 +106,36 @@ impl Board {
         board
     }
 
+    fn unapply_move(&self, mov: Move) -> Board {
+        let (fr, ff) = mov.from;
+        let (tr, tf) = mov.to;
+        let mut board = *self;
+        board[tr][tf] = Position::Empty;
+        if let Some(cap) = mov.capture {
+            let (cr, cf) = cap.pos;
+            board[cr][cf] = Position::Occupied(cap.piece, cap.colour);
+        }
+        board[fr][ff] = Position::Occupied(mov.piece, mov.colour);
+        if mov.piece == Piece::King {
+            if mov.colour == Colour::White {
+                if mov.from == (7, 4) && mov.to == (7, 6) {
+                    board[7][5] = Position::Empty;
+                    board[7][7] = Position::Occupied(Piece::Rook, Colour::White);
+                } else if mov.from == (7, 4) && mov.to == (7, 2) {
+                    board[7][3] = Position::Empty;
+                    board[7][0] = Position::Occupied(Piece::Rook, Colour::White);
+                }
+            } else if mov.from == (0, 4) && mov.to == (0, 6) {
+                board[0][5] = Position::Empty;
+                board[0][7] = Position::Occupied(Piece::Rook, Colour::Black);
+            } else if mov.from == (0, 4) && mov.to == (0, 2) {
+                board[0][3] = Position::Empty;
+                board[0][0] = Position::Occupied(Piece::Rook, Colour::Black);
+            }
+        }
+        board
+    }
+
     fn move_verify_checks(&self, mov: &mut Move) -> bool {
         let nb = self.apply_move(*mov);
         let kic = nb.king_check_cnt();
@@ -306,10 +336,132 @@ fn king_distance_positions(rank: usize, file: usize) -> Vec<(usize, usize)> {
 }
 
 #[derive(Debug)]
-pub struct Game {
+struct IndexedStore<T> {
+    store: Vec<Option<T>>,
+    insert_idx: Option<usize>,
+}
+
+impl<T> IndexedStore<T> {
+    fn new() -> Self {
+        Self {
+            store: Vec::new(),
+            insert_idx: None,
+        }
+    }
+
+    fn get(&self, idx: usize) -> &T {
+        self.store.get(idx).unwrap().as_ref().unwrap()
+    }
+
+    fn get_mut(&mut self, idx: usize) -> &mut T {
+        self.store.get_mut(idx).unwrap().as_mut().unwrap()
+    }
+
+    fn delete(&mut self, idx: usize) {
+        self.store[idx] = None;
+        self.insert_idx = Some(self.insert_idx.map_or(idx, |ii| ii.min(idx)));
+    }
+
+    fn insert(&mut self, t: T) -> usize {
+        if let Some(ii) = self.insert_idx {
+            self.store[ii] = Some(t);
+            self.insert_idx = None;
+            for (i, v) in self.store[ii + 1..self.store.len()].iter().enumerate() {
+                if v.is_none() {
+                    self.insert_idx = Some(i);
+                }
+            }
+            ii
+        } else {
+            self.store.push(Some(t));
+            self.store.len() - 1
+        }
+    }
+}
+
+#[derive(Debug)]
+struct FenNode {
     fen: Fen,
-    moves: Vec<Move>,
     is_check: bool,
+    parent: Option<usize>,
+    children: Vec<(Move, usize)>,
+}
+
+impl FenNode {
+    fn root(fen: Fen, is_check: bool) -> Self {
+        Self {
+            fen,
+            parent: None,
+            children: Vec::new(),
+            is_check,
+        }
+    }
+
+    fn internal_node(fen: Fen, is_check: bool, parent: usize) -> Self {
+        Self {
+            fen,
+            parent: Some(parent),
+            children: Vec::new(),
+            is_check,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct FenTree {
+    store: IndexedStore<FenNode>,
+    root: usize,
+    curr: usize,
+}
+
+impl FenTree {
+    fn new(fen: Fen, is_check: bool) -> Self {
+        let mut store = IndexedStore::new();
+        let root_node = FenNode::root(fen, is_check);
+        let root = store.insert(root_node);
+        Self {
+            store,
+            root,
+            curr: root,
+        }
+    }
+
+    fn curr_fen(&self) -> &Fen {
+        &self.store.get(self.curr).fen
+    }
+
+    fn curr_fen_mut(&mut self) -> &mut Fen {
+        &mut self.store.get_mut(self.curr).fen
+    }
+
+    fn curr_is_check(&self) -> bool {
+        self.store.get(self.curr).is_check
+    }
+
+    fn apply_move(&mut self, mov: Move) {
+        let children = &mut self.store.get_mut(self.curr).children;
+        if children.iter().any(|(m, _)| m == &mov) {
+            return;
+        }
+
+        let new_fen = self.curr_fen().apply_move(mov);
+        let new_is_check = mov.check_cnt > 0;
+        let new_node = FenNode::internal_node(new_fen, new_is_check, self.curr);
+        let new_curr = self.store.insert(new_node);
+        self.store.get_mut(self.curr).children.push((mov, new_curr));
+        self.curr = new_curr;
+    }
+
+    fn unapply_move(&mut self) {
+        if let Some(parent) = self.store.get(self.curr).parent {
+            self.curr = parent;
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Game {
+    tree: FenTree,
 }
 
 impl Game {
@@ -318,45 +470,41 @@ impl Game {
         let fen = INIT_FEN.parse::<Fen>().unwrap();
         let kic = fen.board.king_check_cnt();
         let is_check = kic.check_cnt(fen.to_move) > 0;
-        Self {
-            fen,
-            moves: Vec::new(),
-            is_check,
-        }
+        let tree = FenTree::new(fen, is_check);
+        Self { tree }
     }
 
     pub fn board(&self) -> &Board {
-        &self.fen.board
+        &self.tree.curr_fen().board
     }
 
     pub fn board_mut(&mut self) -> &mut Board {
-        &mut self.fen.board
+        &mut self.tree.curr_fen_mut().board
     }
 
     pub fn to_move(&self) -> Colour {
-        self.fen.to_move
+        self.tree.curr_fen().to_move
     }
 
     pub fn legal_moves(&self, rank: usize, file: usize) -> HashMap<(usize, usize), Move> {
-        self.fen.legal_moves(rank, file)
+        self.tree.curr_fen().legal_moves(rank, file)
     }
 
     pub fn apply_move(&mut self, mov: Move) {
-        self.fen.apply_move(mov);
-        self.moves.push(mov);
-        self.is_check = mov.check_cnt > 0;
+        self.tree.apply_move(mov);
     }
 
     pub fn is_check(&self) -> bool {
-        self.is_check
+        self.tree.curr_is_check()
     }
 
     pub fn king_position(&self) -> (usize, usize) {
+        let fen = self.tree.curr_fen();
         for rank in 0..BOARD_SIZE {
             for file in 0..BOARD_SIZE {
-                if matches!(self.fen.board[rank][file],
-                    Position::Occupied(Piece::King, kc) 
-                    | Position::Picked(Piece::King, kc) if kc == self.fen.to_move)
+                if matches!(fen.board[rank][file],
+                    Position::Occupied(Piece::King, kc)
+                    | Position::Picked(Piece::King, kc) if kc == fen.to_move)
                 {
                     return (rank, file);
                 }
@@ -366,7 +514,7 @@ impl Game {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Fen {
     board: Board,
     to_move: Colour,
@@ -379,7 +527,7 @@ struct Fen {
     move_cnt: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Move {
     piece: Piece,
     colour: Colour,
@@ -417,7 +565,7 @@ impl Move {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct CapturedPiece {
     piece: Piece,
     colour: Colour,
@@ -425,56 +573,60 @@ struct CapturedPiece {
 }
 
 impl Fen {
-    fn apply_move(&mut self, mov: Move) {
+    fn apply_move(&self, mov: Move) -> Fen {
+        let mut fen = *self;
+
         if mov.colour == Colour::Black {
-            self.move_cnt += 1;
+            fen.move_cnt += 1;
         }
-        self.board = self.board.apply_move(mov);
-        self.to_move = self.to_move.opposite();
+        fen.board = fen.board.apply_move(mov);
+        fen.to_move = fen.to_move.opposite();
 
         // Update castling
         if mov.colour == Colour::White {
             if mov.piece == Piece::King {
-                self.white_king_castle = false;
-                self.white_queen_castle = false;
+                fen.white_king_castle = false;
+                fen.white_queen_castle = false;
             }
             if mov.piece == Piece::Rook && mov.from == (7, 7) {
-                self.white_king_castle = false;
+                fen.white_king_castle = false;
             }
             if mov.piece == Piece::Rook && mov.from == (7, 0) {
-                self.white_queen_castle = false;
+                fen.white_queen_castle = false;
             }
         } else {
             if mov.piece == Piece::King {
-                self.black_king_castle = false;
-                self.black_queen_castle = false;
+                fen.black_king_castle = false;
+                fen.black_queen_castle = false;
             }
             if mov.piece == Piece::Rook && mov.from == (0, 7) {
-                self.black_king_castle = false;
+                fen.black_king_castle = false;
             }
             if mov.piece == Piece::Rook && mov.from == (0, 0) {
-                self.black_queen_castle = false;
+                fen.black_queen_castle = false;
             }
         }
 
         // Update en-passant
         if mov.piece == Piece::Pawn {
             if mov.colour == Colour::White && mov.to.0 == 4 && mov.from.0 == 6 {
-                self.en_passant = Some((5, mov.to.1));
+                fen.en_passant = Some((5, mov.to.1));
             } else if mov.colour == Colour::Black && mov.to.0 == 3 && mov.from.0 == 1 {
-                self.en_passant = Some((2, mov.to.1));
+                fen.en_passant = Some((2, mov.to.1));
             } else {
-                self.en_passant = None;
+                fen.en_passant = None;
             }
         } else {
-            self.en_passant = None;
+            fen.en_passant = None;
         }
 
         if mov.piece != Piece::Pawn && mov.capture.is_none() {
-            self.halfmove_clock += 1;
+            fen.halfmove_clock += 1;
         } else {
-            self.halfmove_clock = 0;
+            fen.halfmove_clock = 0;
         }
+
+        fen
     }
 
     fn make_move(
