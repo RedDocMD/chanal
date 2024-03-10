@@ -438,7 +438,7 @@ impl Fen {
         if mov.piece == Piece::Pawn {
             if mov.colour == Colour::White && mov.to.0 == 4 && mov.from.0 == 6 {
                 self.en_passant = Some((5, mov.to.1));
-            } else if mov.colour == Colour::Black && mov.to.1 == 3 && mov.from.0 == 1 {
+            } else if mov.colour == Colour::Black && mov.to.0 == 3 && mov.from.0 == 1 {
                 self.en_passant = Some((2, mov.to.1));
             } else {
                 self.en_passant = None;
