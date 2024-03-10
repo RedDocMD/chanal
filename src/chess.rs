@@ -80,7 +80,12 @@ impl Board {
             let (cr, cf) = cap.pos;
             board[cr][cf] = Position::Empty;
         }
-        board[tr][tf] = Position::Occupied(mov.piece, mov.colour);
+        let (piece, colour) = if let Some((piece, colour)) = mov.promotion {
+            (piece, colour)
+        } else {
+            (mov.piece, mov.colour)
+        };
+        board[tr][tf] = Position::Occupied(piece, colour);
         if mov.piece == Piece::King {
             if mov.colour == Colour::White {
                 if mov.from == (7, 4) && mov.to == (7, 6) {
@@ -359,6 +364,8 @@ pub struct Move {
     to: (usize, usize),
     capture: Option<CapturedPiece>,
     check_cnt: usize,
+    may_promote: bool,
+    promotion: Option<(Piece, Colour)>,
 }
 
 impl Move {
@@ -368,6 +375,22 @@ impl Move {
 
     pub fn has_check(&self) -> bool {
         self.check_cnt > 0
+    }
+
+    pub fn may_promote(&self) -> bool {
+        self.may_promote
+    }
+
+    pub fn set_promotion(&mut self, piece: Piece, colour: Colour) {
+        self.promotion = Some((piece, colour));
+    }
+
+    pub fn to(&self) -> (usize, usize) {
+        self.to
+    }
+
+    pub fn colour(&self) -> Colour {
+        self.colour
     }
 }
 
@@ -449,6 +472,8 @@ impl Fen {
                 to: (new_rank, new_file),
                 capture: None,
                 check_cnt: 0,
+                may_promote: false,
+                promotion: None,
             },
             Position::Occupied(np, nc) => {
                 if nc == colour {
@@ -465,6 +490,8 @@ impl Fen {
                             pos: (new_rank, new_file),
                         }),
                         check_cnt: 0,
+                        may_promote: false,
+                        promotion: None,
                     }
                 }
             }
@@ -599,6 +626,8 @@ impl Fen {
                                 pos: (3, epf),
                             }),
                             check_cnt: 0,
+                            may_promote: false,
+                            promotion: None,
                         };
                         if self.board.move_verify_checks(&mut mov) {
                             moves.insert((epr, epf), mov);
@@ -619,10 +648,19 @@ impl Fen {
                                 pos: (4, epf),
                             }),
                             check_cnt: 0,
+                            may_promote: false,
+                            promotion: None,
                         };
                         if self.board.move_verify_checks(&mut mov) {
                             moves.insert((epr, epf), mov);
                         }
+                    }
+                }
+                for mov in moves.values_mut() {
+                    if (mov.colour == Colour::White && mov.to.0 == 0)
+                        || (mov.colour == Colour::Black && mov.to.0 == 7)
+                    {
+                        mov.may_promote = true;
                     }
                 }
                 return moves;
@@ -732,7 +770,7 @@ impl Fen {
                 Position::Picked(_, _) => continue,
             }
         }
-        for diff in 1..rank.min(BOARD_SIZE - file) {
+        for diff in 1..(rank + 1).min(BOARD_SIZE - file) {
             let nr = rank - diff;
             let nf = file + diff;
             let pos = self.board[nr][nf];

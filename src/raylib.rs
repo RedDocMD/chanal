@@ -186,6 +186,7 @@ mod sys {
         pub fn GetMousePosition() -> Vector2;
         pub fn IsMouseButtonDown(button: c_int) -> c_int;
         pub fn IsMouseButtonReleased(button: c_int) -> c_int;
+        pub fn IsMouseButtonPressed(button: c_int) -> c_int;
 
         pub fn CheckCollisionPointRec(point: Vector2, rect: Rectangle) -> c_int;
 
@@ -458,6 +459,10 @@ pub fn check_collision_point_rect(point: Vector2, rect: Rectangle) -> bool {
 
 pub fn is_mouse_button_down(mb: MouseButton) -> bool {
     unsafe { sys::IsMouseButtonDown(mb as _) != 0 }
+}
+
+pub fn is_mouse_button_pressed(mb: MouseButton) -> bool {
+    unsafe { sys::IsMouseButtonPressed(mb as _) != 0 }
 }
 
 pub fn is_mouse_button_released(mb: MouseButton) -> bool {
