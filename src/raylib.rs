@@ -149,6 +149,14 @@ mod sys {
         frame_count: c_uint,
     }
 
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct RenderTexture {
+        id: c_uint,
+        pub texture: Texture2D,
+        depth: Texture2D,
+    }
+
     #[link(name = "raylib")]
     extern "C" {
         pub fn InitWindow(width: c_int, height: c_int, title: *const c_char);
@@ -177,10 +185,14 @@ mod sys {
         pub fn LoadTextureFromImage(image: Image) -> Texture2D;
         pub fn UnloadTexture(texture: Texture2D);
         pub fn DrawTexture(texture: Texture2D, xpos: c_int, ypos: c_int, tint: RaylibColour);
+        pub fn LoadRenderTexture(width: c_int, height: c_int) -> RenderTexture;
+        pub fn UnloadRenderTexture(render_texture: RenderTexture);
 
         pub fn BeginDrawing();
         pub fn EndDrawing();
         pub fn ClearBackground(color: RaylibColour);
+        pub fn BeginTextureMode(target: RenderTexture);
+        pub fn EndTextureMode();
 
         pub fn SetMouseCursor(cursor: c_int);
         pub fn GetMousePosition() -> Vector2;
@@ -202,6 +214,13 @@ mod sys {
             colour: RaylibColour,
         );
         pub fn DrawCircle(center_x: c_int, center_y: c_int, radius: c_float, colour: RaylibColour);
+        pub fn DrawCircleGradient(
+            x: c_int,
+            y: c_int,
+            radius: c_float,
+            colour1: RaylibColour,
+            colour2: RaylibColour,
+        );
 
         pub fn InitAudioDevice();
         pub fn CloseAudioDevice();
@@ -435,6 +454,33 @@ impl Drop for Texture2D {
     }
 }
 
+pub struct RenderTexture {
+    rtex: sys::RenderTexture,
+}
+
+impl RenderTexture {
+    pub fn new(width: u32, height: u32) -> Self {
+        let rtex = unsafe { sys::LoadRenderTexture(width as _, height as _) };
+        Self { rtex }
+    }
+
+    pub fn draw(&self, x: u32, y: u32, tint: RaylibColour) {
+        unsafe { sys::DrawTexture(self.rtex.texture, x as _, y as _, tint) };
+    }
+
+    pub fn do_draw(&mut self, draw_fn: impl FnOnce()) {
+        unsafe { sys::BeginTextureMode(self.rtex) };
+        draw_fn();
+        unsafe { sys::EndTextureMode() };
+    }
+}
+
+impl Drop for RenderTexture {
+    fn drop(&mut self) {
+        unsafe { sys::UnloadRenderTexture(self.rtex) };
+    }
+}
+
 pub fn do_draw(draw_fn: impl FnOnce()) {
     unsafe { sys::BeginDrawing() };
     draw_fn();
@@ -479,4 +525,14 @@ pub fn draw_rectangle(x: u32, y: u32, width: u32, height: u32, colour: RaylibCol
 
 pub fn draw_circle(x: u32, y: u32, radius: f32, colour: RaylibColour) {
     unsafe { sys::DrawCircle(x as _, y as _, radius as _, colour) };
+}
+
+pub fn draw_circle_gradient(
+    x: u32,
+    y: u32,
+    radius: f32,
+    colour1: RaylibColour,
+    colour2: RaylibColour,
+) {
+    unsafe { sys::DrawCircleGradient(x as _, y as _, radius as _, colour1, colour2) };
 }

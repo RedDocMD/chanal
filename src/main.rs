@@ -36,6 +36,13 @@ const HIGHTLIGHT_ORANGE: RaylibColour = RaylibColour {
     a: 255,
 };
 
+const CHECK_RED: RaylibColour = RaylibColour {
+    r: 239,
+    g: 14,
+    b: 48,
+    a: 255,
+};
+
 fn main() {
     set_trace_log_level(TraceLogLevel::Error);
 
@@ -132,6 +139,25 @@ fn main() {
             }
         }
 
+        let check_tex = if gs.game.is_check() {
+            let mut rtex = RenderTexture::new(sizes.piece_size, sizes.piece_size);
+            rtex.do_draw(|| {
+                let x = sizes.piece_size / 2;
+                let y = sizes.piece_size / 2;
+                let radius = (sizes.piece_size as f32 / 2.0) * 2.5;
+                const EMPTY: RaylibColour = RaylibColour {
+                    r: 239,
+                    g: 14,
+                    b: 48,
+                    a: 0,
+                };
+                draw_circle_gradient(x, y, radius, CHECK_RED, EMPTY);
+            });
+            Some(rtex)
+        } else {
+            None
+        };
+
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
             board_tex.draw(sizes.boardx, sizes.boardy, WHITE);
@@ -140,6 +166,12 @@ fn main() {
                 let x = sizes.boardx + file as u32 * sizes.piece_size;
                 let y = sizes.boardy + rank as u32 * sizes.piece_size;
                 draw_rectangle(x, y, sizes.piece_size, sizes.piece_size, MARK_COLOUR);
+            }
+            if let Some(check_tex) = &check_tex {
+                let (kr, kf) = gs.game.king_position();
+                let x = sizes.boardx + kf as u32 * sizes.piece_size;
+                let y = sizes.boardy + kr as u32 * sizes.piece_size;
+                check_tex.draw(x, y, WHITE);
             }
             for (&(rank, file), mov) in &gs.legal_moves {
                 if mov.has_capture() {

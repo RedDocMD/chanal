@@ -220,7 +220,7 @@ impl Board {
                 }
             }
         }
-        for diff in 1..rank.min(BOARD_SIZE - file) {
+        for diff in 1..(rank + 1).min(BOARD_SIZE - file) {
             let nr = rank - diff;
             let nf = file + diff;
             let pos = self[nr][nf];
@@ -234,7 +234,7 @@ impl Board {
                 }
             }
         }
-        for diff in 1..(BOARD_SIZE - rank).min(file) {
+        for diff in 1..(BOARD_SIZE - rank).min(file + 1) {
             let nr = rank + diff;
             let nf = file - diff;
             let pos = self[nr][nf];
@@ -309,15 +309,19 @@ fn king_distance_positions(rank: usize, file: usize) -> Vec<(usize, usize)> {
 pub struct Game {
     fen: Fen,
     moves: Vec<Move>,
+    is_check: bool,
 }
 
 impl Game {
     pub fn new() -> Self {
         const INIT_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         let fen = INIT_FEN.parse::<Fen>().unwrap();
+        let kic = fen.board.king_check_cnt();
+        let is_check = kic.check_cnt(fen.to_move) > 0;
         Self {
             fen,
             moves: Vec::new(),
+            is_check,
         }
     }
 
@@ -340,6 +344,25 @@ impl Game {
     pub fn apply_move(&mut self, mov: Move) {
         self.fen.apply_move(mov);
         self.moves.push(mov);
+        self.is_check = mov.check_cnt > 0;
+    }
+
+    pub fn is_check(&self) -> bool {
+        self.is_check
+    }
+
+    pub fn king_position(&self) -> (usize, usize) {
+        for rank in 0..BOARD_SIZE {
+            for file in 0..BOARD_SIZE {
+                if matches!(self.fen.board[rank][file],
+                    Position::Occupied(Piece::King, kc) 
+                    | Position::Picked(Piece::King, kc) if kc == self.fen.to_move)
+                {
+                    return (rank, file);
+                }
+            }
+        }
+        unreachable!("There must be a king of each colour on the board!");
     }
 }
 
@@ -785,7 +808,7 @@ impl Fen {
                 Position::Picked(_, _) => continue,
             }
         }
-        for diff in 1..(BOARD_SIZE - rank).min(file) {
+        for diff in 1..(BOARD_SIZE - rank).min(file + 1) {
             let nr = rank + diff;
             let nf = file - diff;
             let pos = self.board[nr][nf];
