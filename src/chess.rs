@@ -3,6 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
+use itertools::iproduct;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Sequence)]
 pub enum Piece {
@@ -12,6 +13,19 @@ pub enum Piece {
     Bishop,
     King,
     Queen,
+}
+
+impl Piece {
+    fn to_char(self) -> Option<char> {
+        match self {
+            Piece::Pawn => None,
+            Piece::Rook => Some('R'),
+            Piece::Knight => Some('N'),
+            Piece::Bishop => Some('B'),
+            Piece::King => Some('K'),
+            Piece::Queen => Some('Q'),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Sequence)]
@@ -68,6 +82,14 @@ impl KingCheckCnt {
             Colour::Black => self.black,
         }
     }
+}
+
+fn rank_to_char(rank: usize) -> char {
+    ((BOARD_SIZE - rank) as u8 + b'0') as char
+}
+
+fn file_to_char(file: usize) -> char {
+    (b'a' + file as u8) as char
 }
 
 impl Board {
@@ -144,6 +166,77 @@ impl Board {
         } else {
             mov.check_cnt = kic.check_cnt(mov.colour.opposite());
             true
+        }
+    }
+
+    fn king_position(&self, colour: Colour) -> (usize, usize) {
+        for rank in 0..BOARD_SIZE {
+            for file in 0..BOARD_SIZE {
+                if matches!(self[rank][file],
+                    Position::Occupied(Piece::King, kc)
+                    | Position::Picked(Piece::King, kc) if kc == colour)
+                {
+                    return (rank, file);
+                }
+            }
+        }
+        let colstr = match colour {
+            Colour::White => "white",
+            Colour::Black => "black",
+        };
+        unreachable!(
+            "There must be {} king of either colour on the board",
+            colstr
+        );
+    }
+
+    fn make_move(
+        &self,
+        piece: Piece,
+        colour: Colour,
+        rank: usize,
+        file: usize,
+        new_rank: usize,
+        new_file: usize,
+    ) -> Option<Move> {
+        let pos = self[new_rank][new_file];
+        let mut mov = match pos {
+            Position::Empty => Move {
+                piece,
+                colour,
+                from: (rank, file),
+                to: (new_rank, new_file),
+                capture: None,
+                check_cnt: 0,
+                may_promote: false,
+                promotion: None,
+            },
+            Position::Occupied(np, nc) => {
+                if nc == colour {
+                    return None;
+                } else {
+                    Move {
+                        piece,
+                        colour,
+                        from: (rank, file),
+                        to: (new_rank, new_file),
+                        capture: Some(CapturedPiece {
+                            piece: np,
+                            colour: nc,
+                            pos: (new_rank, new_file),
+                        }),
+                        check_cnt: 0,
+                        may_promote: false,
+                        promotion: None,
+                    }
+                }
+            }
+            Position::Picked(_, _) => return None,
+        };
+        if self.move_verify_checks(&mut mov) {
+            Some(mov)
+        } else {
+            None
         }
     }
 
@@ -383,26 +476,29 @@ impl<T> IndexedStore<T> {
 struct FenNode {
     fen: Fen,
     is_check: bool,
+    is_mate: bool,
     parent: Option<usize>,
     children: Vec<(Move, usize)>,
 }
 
 impl FenNode {
-    fn root(fen: Fen, is_check: bool) -> Self {
+    fn root(fen: Fen, is_check: bool, is_mate: bool) -> Self {
         Self {
             fen,
             parent: None,
             children: Vec::new(),
             is_check,
+            is_mate,
         }
     }
 
-    fn internal_node(fen: Fen, is_check: bool, parent: usize) -> Self {
+    fn internal_node(fen: Fen, is_check: bool, is_mate: bool, parent: usize) -> Self {
         Self {
             fen,
             parent: Some(parent),
             children: Vec::new(),
             is_check,
+            is_mate,
         }
     }
 }
@@ -415,9 +511,9 @@ struct FenTree {
 }
 
 impl FenTree {
-    fn new(fen: Fen, is_check: bool) -> Self {
+    fn new(fen: Fen, is_check: bool, is_mate: bool) -> Self {
         let mut store = IndexedStore::new();
-        let root_node = FenNode::root(fen, is_check);
+        let root_node = FenNode::root(fen, is_check, is_mate);
         let root = store.insert(root_node);
         Self {
             store,
@@ -439,6 +535,7 @@ impl FenTree {
     }
 
     fn apply_move(&mut self, mov: Move) {
+        println!("{}", self.store.get(self.curr).fen.move_string(mov));
         let children = &mut self.store.get_mut(self.curr).children;
         if children.iter().any(|(m, _)| m == &mov) {
             return;
@@ -446,7 +543,8 @@ impl FenTree {
 
         let new_fen = self.curr_fen().apply_move(mov);
         let new_is_check = mov.check_cnt > 0;
-        let new_node = FenNode::internal_node(new_fen, new_is_check, self.curr);
+        let new_is_mate = new_fen.is_mate();
+        let new_node = FenNode::internal_node(new_fen, new_is_check, new_is_mate, self.curr);
         let new_curr = self.store.insert(new_node);
         self.store.get_mut(self.curr).children.push((mov, new_curr));
         self.curr = new_curr;
@@ -468,9 +566,7 @@ impl Game {
     pub fn new() -> Self {
         const INIT_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         let fen = INIT_FEN.parse::<Fen>().unwrap();
-        let kic = fen.board.king_check_cnt();
-        let is_check = kic.check_cnt(fen.to_move) > 0;
-        let tree = FenTree::new(fen, is_check);
+        let tree = FenTree::new(fen, false, false);
         Self { tree }
     }
 
@@ -500,17 +596,7 @@ impl Game {
 
     pub fn king_position(&self) -> (usize, usize) {
         let fen = self.tree.curr_fen();
-        for rank in 0..BOARD_SIZE {
-            for file in 0..BOARD_SIZE {
-                if matches!(fen.board[rank][file],
-                    Position::Occupied(Piece::King, kc)
-                    | Position::Picked(Piece::King, kc) if kc == fen.to_move)
-                {
-                    return (rank, file);
-                }
-            }
-        }
-        unreachable!("There must be a king of each colour on the board!");
+        fen.board.king_position(fen.to_move)
     }
 }
 
@@ -573,6 +659,57 @@ struct CapturedPiece {
 }
 
 impl Fen {
+    fn move_string(&self, mov: Move) -> String {
+        // FIXME: Disambiguate knight
+        // FIXME: Disambiguate rook
+        if mov.piece == Piece::King {
+            if (mov.colour == Colour::Black && mov.from == (0, 4) && mov.to == (0, 6))
+                || (mov.colour == Colour::White && mov.from == (7, 4) && mov.to == (7, 6))
+            {
+                return "O-O".to_string();
+            } else if (mov.colour == Colour::Black && mov.from == (0, 4) && mov.to == (0, 2))
+                || (mov.colour == Colour::White && mov.from == (7, 4) && mov.to == (7, 2))
+            {
+                return "O-O-O".to_string();
+            }
+        }
+        let mut ms = String::new();
+        if let Some(pc) = mov.piece.to_char() {
+            ms.push(pc);
+        } else {
+            ms.push(file_to_char(mov.from.1));
+        }
+        if mov.capture.is_some() {
+            ms.push('x');
+        }
+        if !(mov.piece == Piece::Pawn && mov.capture.is_none()) {
+            ms.push(file_to_char(mov.to.1));
+        }
+        ms.push(rank_to_char(mov.to.0));
+        let new_fen = self.apply_move(mov);
+        if new_fen.is_mate() {
+            ms.push('#');
+        } else {
+            for _i in 0..mov.check_cnt {
+                ms.push('+');
+            }
+        }
+        ms
+    }
+
+    fn is_mate(&self) -> bool {
+        let kic = self.board.king_check_cnt();
+        if kic.check_cnt(self.to_move) == 0 {
+            return false;
+        }
+        !iproduct!(0..BOARD_SIZE, 0..BOARD_SIZE)
+            .filter(|&(r, f)| {
+                matches!(self.board[r][f],
+                Position::Occupied(_, colour) if colour == self.to_move)
+            })
+            .any(|(r, f)| !self.legal_moves(r, f).is_empty())
+    }
+
     fn apply_move(&self, mov: Move) -> Fen {
         let mut fen = *self;
 
@@ -627,56 +764,6 @@ impl Fen {
         }
 
         fen
-    }
-
-    fn make_move(
-        &self,
-        piece: Piece,
-        colour: Colour,
-        rank: usize,
-        file: usize,
-        new_rank: usize,
-        new_file: usize,
-    ) -> Option<Move> {
-        let pos = self.board[new_rank][new_file];
-        let mut mov = match pos {
-            Position::Empty => Move {
-                piece,
-                colour,
-                from: (rank, file),
-                to: (new_rank, new_file),
-                capture: None,
-                check_cnt: 0,
-                may_promote: false,
-                promotion: None,
-            },
-            Position::Occupied(np, nc) => {
-                if nc == colour {
-                    return None;
-                } else {
-                    Move {
-                        piece,
-                        colour,
-                        from: (rank, file),
-                        to: (new_rank, new_file),
-                        capture: Some(CapturedPiece {
-                            piece: np,
-                            colour: nc,
-                            pos: (new_rank, new_file),
-                        }),
-                        check_cnt: 0,
-                        may_promote: false,
-                        promotion: None,
-                    }
-                }
-            }
-            Position::Picked(_, _) => return None,
-        };
-        if self.board.move_verify_checks(&mut mov) {
-            Some(mov)
-        } else {
-            None
-        }
     }
 
     pub fn legal_moves(&self, rank: usize, file: usize) -> HashMap<(usize, usize), Move> {
@@ -780,7 +867,8 @@ impl Fen {
                 let mut moves = positions
                     .into_iter()
                     .filter_map(|(nr, nf)| {
-                        self.make_move(piece, colour, rank, file, nr, nf)
+                        self.board
+                            .make_move(piece, colour, rank, file, nr, nf)
                             .map(|m| ((nr, nf), m))
                     })
                     .collect::<HashMap<_, _>>();
@@ -845,7 +933,8 @@ impl Fen {
         positions
             .into_iter()
             .filter_map(|(nr, nf)| {
-                self.make_move(piece, colour, rank, file, nr, nf)
+                self.board
+                    .make_move(piece, colour, rank, file, nr, nf)
                     .map(|m| ((nr, nf), m))
             })
             .collect()
