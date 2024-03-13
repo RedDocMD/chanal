@@ -7,3 +7,7 @@ edition = "2021"
 enum-iterator = "2.0.0"
 itertools = "0.12.1"
 thiserror = "1.0.57"
+
+[build-dependencies]
+pkg-config = "0.3.30"
+

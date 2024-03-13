@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "enum-iterator",
  "itertools",
+ "pkg-config",
  "thiserror",
 ]
 
@@ -45,6 +46,12 @@ checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
 dependencies = [
  "either",
 ]
+
+[[package]]
+name = "pkg-config"
+version = "0.3.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "proc-macro2"
