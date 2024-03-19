@@ -93,6 +93,17 @@ fn file_to_char(file: usize) -> char {
 }
 
 impl Board {
+    fn unpick_pieces(&mut self) {
+        for rank in 0..BOARD_SIZE {
+            for file in 0..BOARD_SIZE {
+                let pos = self[rank][file];
+                if let Position::Picked(piece, col) = pos {
+                    self[rank][file] = Position::Occupied(piece, col);
+                }
+            }
+        }
+    }
+
     fn apply_move(&self, mov: Move) -> Board {
         let (fr, ff) = mov.from;
         let (tr, tf) = mov.to;
@@ -535,6 +546,9 @@ impl FenTree {
     }
 
     fn apply_move(&mut self, mov: Move) {
+        if self.store.get(self.curr).is_mate {
+            return;
+        }
         println!("{}", self.store.get(self.curr).fen.move_string(mov));
         let children = &mut self.store.get_mut(self.curr).children;
         if children.iter().any(|(m, _)| m == &mov) {
@@ -547,6 +561,7 @@ impl FenTree {
         let new_node = FenNode::internal_node(new_fen, new_is_check, new_is_mate, self.curr);
         let new_curr = self.store.insert(new_node);
         self.store.get_mut(self.curr).children.push((mov, new_curr));
+        self.curr_fen_mut().board.unpick_pieces();
         self.curr = new_curr;
     }
 
@@ -554,6 +569,52 @@ impl FenTree {
         if let Some(parent) = self.store.get(self.curr).parent {
             self.curr = parent;
         }
+    }
+
+    fn next_move(&mut self) {
+        if let Some(&(_, child)) = self.store.get(self.curr).children.first() {
+            self.curr = child;
+        }
+    }
+
+    fn next_variation(&mut self) {
+        let Some(parent) = self
+            .store
+            .get(self.curr)
+            .parent
+            .map(|idx| self.store.get(idx))
+        else {
+            return;
+        };
+        let curr_idx = parent
+            .children
+            .iter()
+            .position(|(_, idx)| idx == &self.curr)
+            .unwrap();
+        if curr_idx == parent.children.len() - 1 {
+            return;
+        }
+        self.curr = parent.children[curr_idx + 1].1;
+    }
+
+    fn prev_variation(&mut self) {
+        let Some(parent) = self
+            .store
+            .get(self.curr)
+            .parent
+            .map(|idx| self.store.get(idx))
+        else {
+            return;
+        };
+        let curr_idx = parent
+            .children
+            .iter()
+            .position(|(_, idx)| idx == &self.curr)
+            .unwrap();
+        if curr_idx == 0 {
+            return;
+        }
+        self.curr = parent.children[curr_idx - 1].1;
     }
 }
 
@@ -588,6 +649,22 @@ impl Game {
 
     pub fn apply_move(&mut self, mov: Move) {
         self.tree.apply_move(mov);
+    }
+
+    pub fn back(&mut self) {
+        self.tree.unapply_move();
+    }
+
+    pub fn forward(&mut self) {
+        self.tree.next_move();
+    }
+
+    pub fn next_variation(&mut self) {
+        self.tree.next_variation();
+    }
+
+    pub fn prev_variation(&mut self) {
+        self.tree.prev_variation();
     }
 
     pub fn is_check(&self) -> bool {

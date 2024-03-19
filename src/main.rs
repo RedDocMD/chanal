@@ -45,6 +45,7 @@ const CHECK_RED: RaylibColour = RaylibColour {
 
 fn main() {
     set_trace_log_level(TraceLogLevel::Error);
+    set_exit_key(Key::Q);
 
     const DEFAULT_WIN_WIDTH: u32 = 496;
     const DEFAULT_WIN_HEIGHT: u32 = 496;
@@ -334,6 +335,24 @@ fn handle_normal_mode(gs: &mut GameState, sizes: Sizes, sounds: &Sounds) {
                         gs.legal_moves.clear();
                     }
                 }
+            }
+        }
+
+        // Handle keyboard presses when piece is not picked
+        if matches!(gs.mouse_state, MouseState::Normal) {
+            if get_char_pressed() != '\0' {
+                gs.legal_moves.clear();
+                gs.marked_square = None;
+                gs.to_unmark = false;
+            }
+            if is_key_released(Key::J) {
+                gs.game.back();
+            } else if is_key_released(Key::K) {
+                gs.game.forward();
+            } else if is_key_released(Key::H) {
+                gs.game.prev_variation();
+            } else if is_key_released(Key::L) {
+                gs.game.next_variation();
             }
         }
     }
