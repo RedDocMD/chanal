@@ -70,7 +70,7 @@ mod sys {
     }
 
     #[repr(C)]
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub struct Vector2 {
         pub x: c_float,
         pub y: c_float,
@@ -286,6 +286,8 @@ mod sys {
         pub fn GetRenderWidth() -> c_int;
         pub fn GetRenderHeight() -> c_int;
         pub fn SetWindowState(flags: c_uint);
+        pub fn SetWindowSize(width: c_int, height: c_int);
+        pub fn IsWindowResized() -> c_int;
 
         pub fn LoadImageFromMemory(ext: *const c_char, data: *const c_uchar, size: c_int) -> Image;
         pub fn LoadImageSvg(file_name_or_str: *const c_char, width: c_int, height: c_int) -> Image;
@@ -395,6 +397,14 @@ impl Window {
             flags_val |= flag as u32;
         }
         unsafe { sys::SetWindowState(flags_val) };
+    }
+
+    pub fn set_size(&mut self, width: u32, height: u32) {
+        unsafe { sys::SetWindowSize(width as _, height as _) };
+    }
+
+    pub fn is_resized(&self) -> bool {
+        unsafe { sys::IsWindowResized() != 0 }
     }
 }
 

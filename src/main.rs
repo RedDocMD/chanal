@@ -43,12 +43,19 @@ const CHECK_RED: RaylibColour = RaylibColour {
     a: 255,
 };
 
+const MOVES_BG_COLOUR: RaylibColour = RaylibColour {
+    r: 38,
+    g: 36,
+    b: 33,
+    a: 255,
+};
+
 fn main() {
     set_trace_log_level(TraceLogLevel::Error);
     set_exit_key(Key::Q);
 
-    const DEFAULT_WIN_WIDTH: u32 = 496;
-    const DEFAULT_WIN_HEIGHT: u32 = 496;
+    const DEFAULT_WIN_WIDTH: u32 = 1000;
+    const DEFAULT_WIN_HEIGHT: u32 = 800;
     const TITLE: &str = "Chanal";
     const FPS: u32 = 60;
 
@@ -69,8 +76,20 @@ fn main() {
 
     win.set_state([ConfigFlag::WindowResizable]);
     win.set_target_fps(FPS);
+
+    let sizes = Sizes::new(&win);
+    win.set_size(sizes.width, sizes.board_size);
+    let mut was_resized = false;
     while !win.should_close() {
         let sizes = Sizes::new(&win);
+        if win.is_resized() {
+            was_resized = true;
+        } else {
+            if was_resized {
+                win.set_size(sizes.width, sizes.board_size);
+            }
+            was_resized = false;
+        }
 
         if gs.pending_promotion.is_some() {
             handle_promotion_mode(&mut gs, sizes);
@@ -164,8 +183,9 @@ fn main() {
 
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
-            board_tex.draw(sizes.boardx, sizes.boardy, WHITE);
 
+            // Draw board and pieces
+            board_tex.draw(sizes.boardx, sizes.boardy, WHITE);
             if let Some((rank, file)) = gs.marked_square {
                 let x = sizes.boardx + file as u32 * sizes.piece_size;
                 let y = sizes.boardy + rank as u32 * sizes.piece_size;
@@ -209,6 +229,10 @@ fn main() {
                 highlight.draw(*x, *y, WHITE);
                 tex.draw(*x, *y, WHITE);
             }
+
+            // Draw moves
+            let md = sizes.moves_dim;
+            draw_rectangle(md.x, md.y, md.width, md.height, MOVES_BG_COLOUR);
         });
     }
 }
@@ -370,33 +394,36 @@ fn handle_normal_mode(gs: &mut GameState, sizes: Sizes, sounds: &Sounds) {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct Sizes {
-    width: u32,
     height: u32,
+    width: u32,
     boardx: u32,
     boardy: u32,
     board_size: u32,
     piece_size: u32,
     mouse_pos: Vector2,
+    moves_dim: DimRect,
 }
 
 impl Sizes {
     fn new(win: &Window) -> Self {
         let (width, height) = win.size();
-        let (boardx, boardy) = (0, 0);
-        let board_size = board_size(width, height);
+        let (board_dim, moves_dim) = board_and_moves_dim(width, height);
+        let (boardx, boardy) = (board_dim.x, board_dim.y);
+        let board_size = board_dim.width;
         let piece_size = board_size / chess::BOARD_SIZE as u32;
         let mouse_pos = get_mouse_position();
 
         Self {
-            width,
             height,
+            width,
             boardx,
             boardy,
             board_size,
             piece_size,
             mouse_pos,
+            moves_dim,
         }
     }
 }
@@ -535,10 +562,25 @@ fn get_image(imgs: &mut HashMap<u32, Image>, size: u32, def_size: u32) -> &Image
     })
 }
 
-fn board_size(width: u32, height: u32) -> u32 {
-    let min_dim = width.min(height);
-    let res = min_dim % chess::BOARD_SIZE as u32;
-    min_dim - res
+#[derive(Clone, Copy, Default, Debug)]
+struct DimRect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+fn board_and_moves_dim(width: u32, height: u32) -> (DimRect, DimRect) {
+    const BOARD_FRAC: f32 = 0.65;
+    let mut board_dim = DimRect::default();
+    let mut moves_dim = DimRect::default();
+    let mut board_size = height.min((width as f32 * BOARD_FRAC) as u32);
+    board_size = board_size - board_size % chess::BOARD_SIZE as u32;
+    (board_dim.width, board_dim.height) = (board_size, board_size);
+    moves_dim.x = board_size;
+    moves_dim.width = width - board_size;
+    moves_dim.height = height;
+    (board_dim, moves_dim)
 }
 
 #[derive(Debug)]
