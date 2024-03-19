@@ -524,6 +524,13 @@ struct FenTree {
     curr: usize,
 }
 
+#[derive(Debug)]
+pub struct GameMove {
+    pub mov: Move,
+    pub is_curr: bool,
+    pub notation: String,
+}
+
 impl FenTree {
     fn new(fen: Fen, is_check: bool, is_mate: bool) -> Self {
         let mut store = IndexedStore::new();
@@ -552,7 +559,6 @@ impl FenTree {
         if self.store.get(self.curr).is_mate {
             return;
         }
-        println!("{}", self.store.get(self.curr).fen.move_string(mov));
         let children = &mut self.store.get_mut(self.curr).children;
         if let Some(&(_, idx)) = children.iter().find(|(m, _)| m == &mov) {
             self.curr_fen_mut().board.unpick_pieces();
@@ -630,6 +636,26 @@ impl FenTree {
         }
         self.curr = parent.children[curr_idx - 1].1;
     }
+
+    fn game_moves(&self) -> Vec<GameMove> {
+        let mut moves = Vec::new();
+        let mut ptr = self.root;
+        let mut node = self.store.get(ptr);
+        while let Some((mov, next)) = node.next_child {
+            let is_curr = ptr == self.curr;
+            let notation = node.fen.move_string(mov);
+            let game_move = GameMove {
+                mov,
+                is_curr,
+                notation,
+            };
+            moves.push(game_move);
+
+            ptr = next;
+            node = self.store.get(ptr);
+        }
+        moves
+    }
 }
 
 #[derive(Debug)]
@@ -688,6 +714,10 @@ impl Game {
     pub fn king_position(&self) -> (usize, usize) {
         let fen = self.tree.curr_fen();
         fen.board.king_position(fen.to_move)
+    }
+
+    pub fn game_moves(&self) -> Vec<GameMove> {
+        self.tree.game_moves()
     }
 }
 

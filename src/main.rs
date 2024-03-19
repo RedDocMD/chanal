@@ -159,6 +159,9 @@ fn main() {
             None
         };
 
+        // For notation along-side
+        let game_moves = gs.game.game_moves();
+
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
             board_tex.draw(sizes.boardx, sizes.boardy, WHITE);
