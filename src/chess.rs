@@ -490,6 +490,7 @@ struct FenNode {
     is_mate: bool,
     parent: Option<usize>,
     children: Vec<(Move, usize)>,
+    next_child: Option<usize>,
 }
 
 impl FenNode {
@@ -500,6 +501,7 @@ impl FenNode {
             children: Vec::new(),
             is_check,
             is_mate,
+            next_child: None,
         }
     }
 
@@ -510,6 +512,7 @@ impl FenNode {
             children: Vec::new(),
             is_check,
             is_mate,
+            next_child: None,
         }
     }
 }
@@ -551,7 +554,9 @@ impl FenTree {
         }
         println!("{}", self.store.get(self.curr).fen.move_string(mov));
         let children = &mut self.store.get_mut(self.curr).children;
-        if children.iter().any(|(m, _)| m == &mov) {
+        if let Some(&(_, idx)) = children.iter().find(|(m, _)| m == &mov) {
+            self.curr_fen_mut().board.unpick_pieces();
+            self.curr = idx;
             return;
         }
 
@@ -560,7 +565,9 @@ impl FenTree {
         let new_is_mate = new_fen.is_mate();
         let new_node = FenNode::internal_node(new_fen, new_is_check, new_is_mate, self.curr);
         let new_curr = self.store.insert(new_node);
-        self.store.get_mut(self.curr).children.push((mov, new_curr));
+        let curr_node = self.store.get_mut(self.curr);
+        curr_node.children.push((mov, new_curr));
+        curr_node.next_child = Some(new_curr);
         self.curr_fen_mut().board.unpick_pieces();
         self.curr = new_curr;
     }
@@ -572,7 +579,10 @@ impl FenTree {
     }
 
     fn next_move(&mut self) {
-        if let Some(&(_, child)) = self.store.get(self.curr).children.first() {
+        let curr = self.store.get(self.curr);
+        if let Some(next_child) = curr.next_child {
+            self.curr = next_child;
+        } else if let Some(&(_, child)) = curr.children.first() {
             self.curr = child;
         }
     }
