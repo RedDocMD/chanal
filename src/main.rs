@@ -348,7 +348,16 @@ fn handle_normal_mode(gs: &mut GameState, sizes: Sizes, sounds: &Sounds) {
             if is_key_released(Key::J) {
                 gs.game.back();
             } else if is_key_released(Key::K) {
-                gs.game.forward();
+                let mov = gs.game.forward();
+                if let Some(mov) = mov {
+                    if mov.has_check() {
+                        sounds.check_sound.play();
+                    } else if mov.has_capture() {
+                        sounds.capture_sound.play();
+                    } else {
+                        sounds.move_sound.play();
+                    }
+                }
             } else if is_key_released(Key::H) {
                 gs.game.prev_variation();
             } else if is_key_released(Key::L) {

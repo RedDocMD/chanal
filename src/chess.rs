@@ -490,7 +490,7 @@ struct FenNode {
     is_mate: bool,
     parent: Option<usize>,
     children: Vec<(Move, usize)>,
-    next_child: Option<usize>,
+    next_child: Option<(Move, usize)>,
 }
 
 impl FenNode {
@@ -567,7 +567,7 @@ impl FenTree {
         let new_curr = self.store.insert(new_node);
         let curr_node = self.store.get_mut(self.curr);
         curr_node.children.push((mov, new_curr));
-        curr_node.next_child = Some(new_curr);
+        curr_node.next_child = Some((mov, new_curr));
         self.curr_fen_mut().board.unpick_pieces();
         self.curr = new_curr;
     }
@@ -578,12 +578,16 @@ impl FenTree {
         }
     }
 
-    fn next_move(&mut self) {
+    fn next_move(&mut self) -> Option<Move> {
         let curr = self.store.get(self.curr);
-        if let Some(next_child) = curr.next_child {
+        if let Some((mov, next_child)) = curr.next_child {
             self.curr = next_child;
-        } else if let Some(&(_, child)) = curr.children.first() {
+            Some(mov)
+        } else if let Some(&(mov, child)) = curr.children.first() {
             self.curr = child;
+            Some(mov)
+        } else {
+            None
         }
     }
 
@@ -665,8 +669,8 @@ impl Game {
         self.tree.unapply_move();
     }
 
-    pub fn forward(&mut self) {
-        self.tree.next_move();
+    pub fn forward(&mut self) -> Option<Move> {
+        self.tree.next_move()
     }
 
     pub fn next_variation(&mut self) {
