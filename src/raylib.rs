@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
+use std::ptr;
 
 pub use sys::{
     ConfigFlag, Key, MouseButton, MouseCursor, RaylibColour, Rectangle, TraceLogLevel, Vector2,
@@ -156,6 +157,29 @@ mod sys {
         pub texture: Texture2D,
         depth: Texture2D,
     }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct GlyphInfo {
+        value: c_int,
+        offset_x: c_int,
+        offset_y: c_int,
+        advance_x: c_int,
+        image: Image,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Font {
+        base_size: c_int,
+        glyph_count: c_int,
+        glyph_padding: c_int,
+        texture: Texture2D,
+        recs: *mut Rectangle,
+        glyphs: *mut GlyphInfo,
+    }
+
+    pub const FONT_TTF_DEFAULT_NUMCHARS: c_int = 95;
 
     #[repr(i32)]
     #[derive(Clone, Copy)]
@@ -358,6 +382,31 @@ mod sys {
         pub fn UnloadWave(wave: Wave);
         pub fn UnloadSound(sound: Sound);
         pub fn PlaySound(sound: Sound);
+
+        pub fn GetFontDefault() -> Font;
+        pub fn LoadFontFromMemory(
+            file_type: *const c_char,
+            file_data: *const c_uchar,
+            data_size: c_int,
+            font_size: c_int,
+            codepoint: *mut c_int,
+            codepoint_cnt: c_int,
+        ) -> Font;
+        pub fn UnloadFont(font: Font);
+        pub fn DrawTextEx(
+            font: Font,
+            text: *const c_char,
+            position: Vector2,
+            font_size: c_float,
+            spacing: c_float,
+            tint: RaylibColour,
+        );
+        pub fn MeasureTextEx(
+            font: Font,
+            text: *const c_char,
+            font_size: c_float,
+            font_spacing: c_float,
+        ) -> Vector2;
     }
 }
 
@@ -437,7 +486,7 @@ pub enum WaveFormat {
 impl WaveFormat {
     pub fn to_cstr(self) -> &'static CStr {
         match self {
-            WaveFormat::Ogg => CStr::from_bytes_with_nul(b".ogg\0").unwrap(),
+            WaveFormat::Ogg => c".ogg",
         }
     }
 }
@@ -492,7 +541,7 @@ pub enum ImgFormat {
 impl ImgFormat {
     pub fn to_cstr(self) -> &'static CStr {
         match self {
-            ImgFormat::Jpg => CStr::from_bytes_with_nul(b".jpg\0").unwrap(),
+            ImgFormat::Jpg => c".jpg",
         }
     }
 }
@@ -591,6 +640,38 @@ pub struct RenderTexture {
     rtex: sys::RenderTexture,
 }
 
+pub struct Font {
+    font: sys::Font,
+}
+
+impl Drop for Font {
+    fn drop(&mut self) {
+        unsafe { sys::UnloadFont(self.font) };
+    }
+}
+
+impl Font {
+    pub fn load_from_ttf(data: &[u8], size: u32) -> Font {
+        const FILE_TYPE: &CStr = c".ttf";
+        let font = unsafe {
+            sys::LoadFontFromMemory(
+                FILE_TYPE.as_ptr(),
+                data.as_ptr(),
+                data.len() as _,
+                size as _,
+                ptr::null_mut(),
+                sys::FONT_TTF_DEFAULT_NUMCHARS,
+            )
+        };
+        Font { font }
+    }
+
+    pub fn load_default() -> Font {
+        let font = unsafe { sys::GetFontDefault() };
+        Font { font }
+    }
+}
+
 impl RenderTexture {
     pub fn new(width: u32, height: u32) -> Self {
         let rtex = unsafe { sys::LoadRenderTexture(width as _, height as _) };
@@ -680,4 +761,30 @@ pub fn draw_circle_gradient(
     colour2: RaylibColour,
 ) {
     unsafe { sys::DrawCircleGradient(x as _, y as _, radius as _, colour1, colour2) };
+}
+
+pub fn draw_text_ex(
+    text: &str,
+    font: &Font,
+    pos: Vector2,
+    size: f32,
+    spacing: f32,
+    colour: RaylibColour,
+) {
+    let text = CString::new(text).unwrap();
+    unsafe {
+        sys::DrawTextEx(
+            font.font,
+            text.as_ptr(),
+            pos,
+            size as _,
+            spacing as _,
+            colour,
+        )
+    };
+}
+
+pub fn measure_text_ex(text: &str, font: &Font, size: f32, spacing: f32) -> Vector2 {
+    let text = CString::new(text).unwrap();
+    unsafe { sys::MeasureTextEx(font.font, text.as_ptr(), size as _, spacing as _) }
 }

@@ -50,6 +50,13 @@ const MOVES_BG_COLOUR: RaylibColour = RaylibColour {
     a: 255,
 };
 
+const MOVES_FG_COLOUR: RaylibColour = RaylibColour {
+    r: 186,
+    g: 186,
+    b: 186,
+    a: 255,
+};
+
 fn main() {
     set_trace_log_level(TraceLogLevel::Error);
     set_exit_key(Key::Q);
@@ -180,6 +187,8 @@ fn main() {
 
         // For notation along-side
         let game_moves = gs.game.game_moves();
+        let font = Font::load_default();
+        let font_size = FontSize::from_size(&font, 15.0);
 
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);
@@ -233,7 +242,43 @@ fn main() {
             // Draw moves
             let md = sizes.moves_dim;
             draw_rectangle(md.x, md.y, md.width, md.height, MOVES_BG_COLOUR);
-        });
+
+            const MOVE_PAD_LEFT: f32 = 10.0;
+            const MOVE_PAD_TOP: f32 = 20.0;
+            const MOVE_GAP_CNT: f32 = 10.0;
+            const MOVE_NUM_GAP_CNT: f32 = 3.5;
+            const MOVE_VSPACE: f32 = 5.0;
+            let move_gap = font_size.em.x * MOVE_GAP_CNT;
+            let move_num_gap = font_size.em.x * MOVE_NUM_GAP_CNT;
+
+            for (turn_num, turn) in game_moves.chunks(2).enumerate() {
+                let turn_str = format!("{}", turn_num + 1);
+                let y = MOVE_PAD_TOP + (MOVE_VSPACE + font_size.em.y) * turn_num as f32;
+                let num_x = md.x as f32 + MOVE_PAD_LEFT;
+                let white_x = num_x + move_num_gap;
+                let (texts, positions) = if turn.len() == 2 {
+                    let black_x = white_x + move_gap;
+                    let texts = vec![&turn_str, &turn[0].notation, &turn[1].notation];
+                    let positions = vec![num_x, white_x, black_x];
+                    (texts, positions)
+                } else {
+                    let texts = vec![&turn_str, &turn[0].notation];
+                    let positions = vec![num_x, white_x];
+                    (texts, positions)
+                };
+                for (t, p) in texts.into_iter().zip(positions) {
+                    let pos = Vector2 { x: p, y };
+                    draw_text_ex(
+                        t.as_str(),
+                        &font,
+                        pos,
+                        font_size.size,
+                        font_size.spacing,
+                        MOVES_FG_COLOUR,
+                    );
+                }
+            }
+        })
     }
 }
 
@@ -638,5 +683,21 @@ impl PromotionState {
             })
             .collect();
         Self { mov, pieces }
+    }
+}
+
+#[derive(Debug)]
+struct FontSize {
+    size: f32,
+    spacing: f32,
+    em: Vector2,
+}
+
+impl FontSize {
+    fn from_size(font: &Font, size: f32) -> Self {
+        const SPACING_FRAC: f32 = 0.2;
+        let spacing = size * SPACING_FRAC;
+        let em = measure_text_ex("M", font, size, spacing);
+        Self { size, spacing, em }
     }
 }
