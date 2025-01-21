@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use assets::ROBOTO_MONO;
 use itertools::iproduct;
 
 use crate::{chess::*, raylib::*};
@@ -187,8 +188,9 @@ fn main() {
 
         // For notation along-side
         let game_moves = gs.game.game_moves();
-        let font = Font::load_default();
-        let font_size = FontSize::from_size(&font, 15.0);
+        const FONT_SIZE: u32 = 25;
+        let font = Font::load_from_ttf(ROBOTO_MONO, FONT_SIZE);
+        let font_size = FontSize::from_size(&font, FONT_SIZE as f32);
 
         raylib::do_draw(|| {
             raylib::clear_background(WHITE);

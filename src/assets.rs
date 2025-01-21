@@ -1,5 +1,7 @@
 use crate::chess::{Colour, Piece};
 
+pub static ROBOTO_MONO: &[u8] = include_bytes!("assets/RobotoMono-Medium.ttf");
+
 pub static WOOD4_JPG: &[u8] = include_bytes!("assets/wood4.jpg");
 
 pub static MERIDA_WHITE_PAWN: &[u8] = include_bytes!("assets/merida/wP.svg");
