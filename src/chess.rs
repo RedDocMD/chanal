@@ -602,7 +602,7 @@ impl FenTree {
             .store
             .get(self.curr)
             .parent
-            .map(|idx| self.store.get(idx))
+            .map(|idx| self.store.get_mut(idx))
         else {
             return;
         };
@@ -614,7 +614,9 @@ impl FenTree {
         if curr_idx == parent.children.len() - 1 {
             return;
         }
-        self.curr = parent.children[curr_idx + 1].1;
+        let (mov, idx) = parent.children[curr_idx + 1];
+        parent.next_child = Some((mov, idx));
+        self.curr = idx;
     }
 
     fn prev_variation(&mut self) {
@@ -622,7 +624,7 @@ impl FenTree {
             .store
             .get(self.curr)
             .parent
-            .map(|idx| self.store.get(idx))
+            .map(|idx| self.store.get_mut(idx))
         else {
             return;
         };
@@ -634,7 +636,9 @@ impl FenTree {
         if curr_idx == 0 {
             return;
         }
-        self.curr = parent.children[curr_idx - 1].1;
+        let (mov, idx) = parent.children[curr_idx - 1];
+        parent.next_child = Some((mov, idx));
+        self.curr = idx;
     }
 
     fn game_moves(&self) -> Vec<GameMove> {
